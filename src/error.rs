@@ -7,7 +7,7 @@ use source_span::{
     DefaultMetrics, Position, SourceBuffer, Span as SourceSpan,
 };
 use std::error::Error;
-use std::fmt::{self, Debug};
+use std::fmt::{self, Debug, Display};
 use std::num::{ParseFloatError, ParseIntError};
 use std::str::ParseBoolError;
 use thiserror::Error;
@@ -19,7 +19,7 @@ use thiserror::Error;
 ///     2 |     [
 ///     3 |         "broken"
 ///     4 |         "array"                                                                                         
-///       |         ^^^^^^^^ Unexpected token, found Some(LiteralString) expected one of [SquareClose, Comma, Arrow]
+///       |         ^^^^^^^^ Unexpected token, found LiteralString expected one of [SquareClose, Comma, Arrow]
 ///     5 |     ]
 ///     6 |
 ///
@@ -112,8 +112,7 @@ impl From<UnescapeError> for ParseError {
     }
 }
 
-#[derive(Error, Debug)]
-#[error("Unexpected token, found {found:?} expected one of {expected:?}")]
+#[derive(Debug)]
 pub struct UnexpectedTokenError {
     pub expected: Vec<Token>,
     pub found: Option<Token>,
@@ -127,6 +126,30 @@ impl UnexpectedTokenError {
         }
     }
 }
+
+impl Display for UnexpectedTokenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.found {
+            Some(Token::Error) => write!(
+                f,
+                "No valid token found, expected one of {:?}",
+                self.expected
+            ),
+            Some(token) => write!(
+                f,
+                "Unexpected token, found {:?} expected one of {:?}",
+                token, self.expected
+            ),
+            None => write!(
+                f,
+                "Unexpected token, found None expected one of {:?}",
+                self.expected
+            ),
+        }
+    }
+}
+
+impl Error for UnexpectedTokenError {}
 
 #[derive(Error, Debug)]
 #[error("Invalid array key {0:?} expected number or string")]
