@@ -1,4 +1,5 @@
 use logos::Logos;
+use std::fmt::{Display, Formatter};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
@@ -27,6 +28,25 @@ pub enum Token {
     #[error]
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Error,
+}
+
+impl Display for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Array => write!(f, "array"),
+            Token::Bool => write!(f, "bool"),
+            Token::Arrow => write!(f, "arrow"),
+            Token::BracketOpen => write!(f, "bracket open"),
+            Token::BracketClose => write!(f, "bracket close"),
+            Token::SquareOpen => write!(f, "square bracket open"),
+            Token::SquareClose => write!(f, "square bracket close"),
+            Token::Comma => write!(f, "comma"),
+            Token::LiteralString => write!(f, "string literal"),
+            Token::Float => write!(f, "float literal"),
+            Token::Integer => write!(f, "integer literal"),
+            Token::Error => write!(f, "invalid token"),
+        }
+    }
 }
 
 #[test]

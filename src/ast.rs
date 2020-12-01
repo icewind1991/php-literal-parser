@@ -1,6 +1,4 @@
-use crate::error::{
-    ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError, UnexpectedTokenError,
-};
+use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
 use crate::lexer::Token;
 use crate::string::{unescape_double, unescape_single, UnescapeError};
 use logos::{Lexer, Logos};
@@ -33,16 +31,15 @@ pub fn parse_lexer<'source>(
 ) -> Result<Value, SpannedError<'source, ParseError>> {
     let token = lexer
         .next()
-        .expect_token("bool, int, float, string, array start")
+        .expect_token(&[
+            Token::Bool,
+            Token::Integer,
+            Token::Float,
+            Token::LiteralString,
+            Token::Array,
+            Token::SquareOpen,
+        ])
         .with_span(lexer.span(), source)?;
-    parse_token(token, source, lexer)
-}
-
-pub fn parse_token<'source>(
-    token: Token,
-    source: &'source str,
-    lexer: &mut Lexer<Token>,
-) -> Result<Value, SpannedError<'source, ParseError>> {
     let value = match token {
         Token::Bool => parse_literal(token, lexer.slice()).with_span(lexer.span(), source)?,
         Token::Integer => parse_literal(token, lexer.slice()).with_span(lexer.span(), source)?,
@@ -52,22 +49,25 @@ pub fn parse_token<'source>(
         }
         Token::Array => Value::Array(parse_array(source, lexer, ArraySyntax::Long)?),
         Token::SquareOpen => Value::Array(parse_array(source, lexer, ArraySyntax::Short)?),
-        _ => todo!(),
+        _ => unreachable!(),
     };
 
     Ok(value)
 }
 
 fn parse_literal(token: Token, slice: &str) -> Result<Value, ParseError> {
+    let token = token.expect_token(&[
+        Token::Bool,
+        Token::Integer,
+        Token::Float,
+        Token::LiteralString,
+    ])?;
     match token {
         Token::Bool => Ok(Value::Bool(slice.parse()?)),
         Token::Integer => Ok(Value::Int(slice.parse()?)),
         Token::Float => Ok(Value::Float(slice.parse()?)),
         Token::LiteralString => Ok(Value::String(parse_string(slice)?)),
-        token => Err(ParseError::UnexpectedToken(UnexpectedTokenError::new(
-            "bool, int, float, string, array start",
-            Some(token),
-        ))),
+        _ => unreachable!(),
     }
 }
 
@@ -117,17 +117,10 @@ fn parse_array<'source>(
     let mut builder = ArrayBuilder::default();
 
     if syntax == ArraySyntax::Long {
-        let open = lexer
+        lexer
             .next()
-            .expect_token("open bracket")
+            .expect_token(&[Token::BracketOpen])
             .with_span(lexer.span(), source)?;
-        if !matches!(open, Token::BracketOpen) {
-            return Err(ParseError::UnexpectedToken(UnexpectedTokenError::new(
-                "open bracket",
-                Some(open),
-            )))
-            .with_span(lexer.span(), source);
-        }
     }
 
     loop {
@@ -135,7 +128,11 @@ fn parse_array<'source>(
         let key_or_value_span = lexer.span();
         let next = lexer
             .next()
-            .expect_token("close bracket, comma, arrow")
+            .expect_token(if syntax == ArraySyntax::Long {
+                &[Token::BracketClose, Token::Comma, Token::Arrow]
+            } else {
+                &[Token::SquareClose, Token::Comma, Token::Arrow]
+            })
             .with_span(lexer.span(), source)?;
 
         match next {
@@ -166,31 +163,25 @@ fn parse_array<'source>(
 
                 match lexer
                     .next()
-                    .expect_token("close bracket, comma, arrow")
+                    .expect_token(if syntax == ArraySyntax::Long {
+                        &[Token::BracketClose, Token::Comma]
+                    } else {
+                        &[Token::SquareClose, Token::Comma]
+                    })
                     .with_span(lexer.span(), source)?
                 {
-                    Token::BracketClose if syntax == ArraySyntax::Long => {
+                    Token::BracketClose => {
                         break;
                     }
-                    Token::SquareClose if syntax == ArraySyntax::Short => {
+                    Token::SquareClose => {
                         break;
                     }
                     Token::Comma => {}
-                    token => {
-                        return Err(ParseError::UnexpectedToken(UnexpectedTokenError::new(
-                            "close bracket, comma, arrow",
-                            Some(token),
-                        )))
-                        .with_span(lexer.span(), source)
-                    }
+                    _ => unreachable!(),
                 }
             }
-            token => {
-                return Err(ParseError::UnexpectedToken(UnexpectedTokenError::new(
-                    "close bracket, comma, arrow",
-                    Some(token),
-                )))
-                .with_span(lexer.span(), source)
+            _ => {
+                unreachable!();
             }
         }
     }
