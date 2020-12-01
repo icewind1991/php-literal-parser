@@ -19,6 +19,28 @@ pub enum Value {
     Array(HashMap<Key, Value>),
 }
 
+/// A php value, can be either a bool, int, float, string or array
+/// note that in php all arrays are associative and thus represented by a map in rust.
+///
+/// You can convert a `Value` into a regular rust type by pattern matching or using the `into_` functions.
+///
+/// ## Indexing
+///
+/// If the value is a php array, you can directly index into the `Value`, this will panic if the `Value` is not an array
+///
+/// ```rust
+/// # use maplit::hashmap;
+/// # use php_literal_parser::Value;
+/// #
+/// # fn main() {
+/// let value = Value::Array(hashmap!{
+///     "key".into() => "value".into(),
+///     10.into() => false.into()
+/// });
+/// assert_eq!(value["key"], "value");
+/// assert_eq!(value[10], false);
+/// # }
+/// ```
 impl Value {
     /// Check if the value is a bool
     pub fn is_bool(&self) -> bool {
@@ -122,12 +144,42 @@ impl PartialEq<String> for Value {
     }
 }
 
-impl PartialEq<str> for Value {
-    fn eq(&self, other: &str) -> bool {
+impl PartialEq<&str> for Value {
+    fn eq(&self, other: &&str) -> bool {
         match self {
-            Value::String(str) => str.as_str() == other,
+            Value::String(str) => str.as_str() == *other,
             _ => false,
         }
+    }
+}
+
+impl From<bool> for Value {
+    fn from(value: bool) -> Self {
+        Value::Bool(value)
+    }
+}
+
+impl From<i64> for Value {
+    fn from(value: i64) -> Self {
+        Value::Int(value)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(value: f64) -> Self {
+        Value::Float(value)
+    }
+}
+
+impl From<String> for Value {
+    fn from(value: String) -> Self {
+        Value::String(value)
+    }
+}
+
+impl From<&str> for Value {
+    fn from(value: &str) -> Self {
+        Value::String(value.into())
     }
 }
 
@@ -155,6 +207,12 @@ impl From<i64> for Key {
 impl From<String> for Key {
     fn from(str: String) -> Self {
         Key::String(str)
+    }
+}
+
+impl From<&str> for Key {
+    fn from(str: &str) -> Self {
+        Key::String(str.into())
     }
 }
 
@@ -239,7 +297,7 @@ fn test_index() {
         Key::String("key".to_string()) => Value::String("value".to_string()),
         Key::Int(1) => Value::Bool(true),
     });
-    assert_eq!(map["key"], Value::String("value".to_string()));
-    assert_eq!(map[1], Value::Bool(true));
-    assert_eq!(map[Key::Int(1)], Value::Bool(true));
+    assert_eq!(map["key"], "value");
+    assert_eq!(map[1], true);
+    assert_eq!(map[Key::Int(1)], true);
 }
