@@ -2,25 +2,28 @@ use crate::error::UnexpectedTokenError;
 use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
 use crate::lexer::Token;
 use crate::string::{unescape_double, unescape_single, UnescapeError};
+use crate::{Key, Value};
 use logos::{Lexer, Logos};
 use std::collections::HashMap;
-use std::fmt::Debug;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Value {
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    String(String),
-    Array(HashMap<Key, Value>),
-}
-
-#[derive(Debug, Eq, PartialEq, Hash, Clone)]
-pub enum Key {
-    Int(i64),
-    String(String),
-}
-
+/// Parse a php literal
+///
+/// ## Example
+///
+/// ```rust
+/// use php_literal_parser::{parse, Value, Key};
+/// # use std::fmt::Debug;
+/// # use std::error::Error;
+///
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// let map = parse(r#"["foo" => true, "nested" => ['foo' => false]]"#)?;
+///
+/// assert_eq!(map["foo"], true);
+/// assert_eq!(map["nested"]["foo"], false);
+/// # Ok(())
+/// # }
+/// ```
+///
 pub fn parse(source: &str) -> Result<Value, SpannedError<ParseError>> {
     let mut lexer: Lexer<Token> = Token::lexer(source);
     parse_lexer(source, &mut lexer)

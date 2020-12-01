@@ -11,4 +11,6 @@ repository = "https://github.com/icewind1991/php-literal-parser"
 logos = "0.11"
 thiserror = "1.0"
 source-span = "2.2"
+
+[dev-dependencies]
 maplit = "1.0.2"

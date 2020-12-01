@@ -33,6 +33,12 @@ impl<'a, T: Error + Debug> SpannedError<'a, T> {
     }
 }
 
+impl<'a, T: Error + Debug + 'static> Error for SpannedError<'a, T> {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        Some(&self.error)
+    }
+}
+
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
 impl<'a, T: Error + Debug> fmt::Display for SpannedError<'a, T> {
