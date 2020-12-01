@@ -27,6 +27,10 @@ impl<'a, T: Error + Debug> SpannedError<'a, T> {
             error,
         }
     }
+
+    pub fn error(&self) -> &T {
+        &self.error
+    }
 }
 
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);

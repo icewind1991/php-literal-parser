@@ -1,3 +1,4 @@
+use crate::error::UnexpectedTokenError;
 use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
 use crate::lexer::Token;
 use crate::string::{unescape_double, unescape_single, UnescapeError};
@@ -124,7 +125,20 @@ fn parse_array<'source>(
     }
 
     loop {
-        let key_or_value = parse_lexer(source, lexer)?;
+        let key_or_value = match parse_lexer(source, lexer) {
+            Ok(value) => value,
+            Err(err) => {
+                // trailing comma or empty array
+                if matches!(
+                    err.error(),
+                    ParseError::UnexpectedToken(UnexpectedTokenError { found: None, .. })
+                ) {
+                    break;
+                } else {
+                    return Err(err);
+                }
+            }
+        };
         let key_or_value_span = lexer.span();
         let next = lexer
             .next()
@@ -202,6 +216,7 @@ fn test_parse() {
         Value::String("test".to_string()),
         parse(r#""test""#).unwrap()
     );
+    assert_eq!(Value::Array(hashmap! {}), parse(r#"array()"#).unwrap());
     assert_eq!(
         Value::Array(hashmap! {
             Key::Int(0) => Value::Int(3),
@@ -209,6 +224,14 @@ fn test_parse() {
             Key::Int(2) => Value::Int(5),
         }),
         parse(r#"array(3,4,5)"#).unwrap()
+    );
+    assert_eq!(
+        Value::Array(hashmap! {
+            Key::Int(0) => Value::Int(3),
+            Key::Int(1) => Value::Int(4),
+            Key::Int(2) => Value::Int(5),
+        }),
+        parse(r#"array(3,4,5,)"#).unwrap()
     );
     assert_eq!(
         Value::Array(hashmap! {
