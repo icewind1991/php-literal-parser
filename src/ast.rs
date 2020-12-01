@@ -110,6 +110,15 @@ enum ArraySyntax {
     Long,
 }
 
+impl ArraySyntax {
+    fn close_bracket(&self) -> Token {
+        match self {
+            ArraySyntax::Long => Token::BracketClose,
+            ArraySyntax::Short => Token::SquareClose,
+        }
+    }
+}
+
 fn parse_array<'source>(
     source: &'source str,
     lexer: &mut Lexer<Token>,
@@ -129,32 +138,27 @@ fn parse_array<'source>(
             Ok(value) => value,
             Err(err) => {
                 // trailing comma or empty array
-                if matches!(
-                    err.error(),
-                    ParseError::UnexpectedToken(UnexpectedTokenError { found: None, .. })
-                ) {
-                    break;
-                } else {
-                    return Err(err);
+                match err.error() {
+                    ParseError::UnexpectedToken(UnexpectedTokenError {
+                        found: Some(token),
+                        ..
+                    }) if token == &syntax.close_bracket() => break,
+                    _ => return Err(err),
                 }
             }
         };
         let key_or_value_span = lexer.span();
         let next = lexer
             .next()
-            .expect_token(if syntax == ArraySyntax::Long {
-                &[Token::BracketClose, Token::Comma, Token::Arrow]
-            } else {
-                &[Token::SquareClose, Token::Comma, Token::Arrow]
-            })
+            .expect_token(&[syntax.close_bracket(), Token::Comma, Token::Arrow])
             .with_span(lexer.span(), source)?;
 
         match next {
-            Token::BracketClose if syntax == ArraySyntax::Long => {
+            Token::BracketClose => {
                 builder.push_value(key_or_value);
                 break;
             }
-            Token::SquareClose if syntax == ArraySyntax::Short => {
+            Token::SquareClose => {
                 builder.push_value(key_or_value);
                 break;
             }
@@ -177,11 +181,7 @@ fn parse_array<'source>(
 
                 match lexer
                     .next()
-                    .expect_token(if syntax == ArraySyntax::Long {
-                        &[Token::BracketClose, Token::Comma]
-                    } else {
-                        &[Token::SquareClose, Token::Comma]
-                    })
+                    .expect_token(&[syntax.close_bracket(), Token::Comma])
                     .with_span(lexer.span(), source)?
                 {
                     Token::BracketClose => {

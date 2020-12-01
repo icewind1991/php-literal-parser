@@ -98,13 +98,16 @@ impl From<UnescapeError> for ParseError {
 #[derive(Error, Debug)]
 #[error("Unexpected token, found {found:?} expected one of {expected:?}")]
 pub struct UnexpectedTokenError {
-    pub expected: &'static [Token],
+    pub expected: Vec<Token>,
     pub found: Option<Token>,
 }
 
 impl UnexpectedTokenError {
-    pub fn new(expected: &'static [Token], found: Option<Token>) -> Self {
-        UnexpectedTokenError { expected, found }
+    pub fn new(expected: &[Token], found: Option<Token>) -> Self {
+        UnexpectedTokenError {
+            expected: expected.to_vec(),
+            found,
+        }
     }
 }
 
@@ -113,13 +116,13 @@ impl UnexpectedTokenError {
 pub struct InvalidArrayKeyError(pub Value);
 
 pub trait ExpectToken {
-    fn expect_token(self, expected: &'static [Token]) -> Result<Token, UnexpectedTokenError>;
+    fn expect_token(self, expected: &[Token]) -> Result<Token, UnexpectedTokenError>;
 }
 
 impl ExpectToken for Option<Token> {
-    fn expect_token(self, expected: &'static [Token]) -> Result<Token, UnexpectedTokenError> {
+    fn expect_token(self, expected: &[Token]) -> Result<Token, UnexpectedTokenError> {
         self.ok_or_else(|| UnexpectedTokenError {
-            expected,
+            expected: expected.to_vec(),
             found: None,
         })
         .and_then(|token| token.expect_token(expected))
@@ -127,13 +130,13 @@ impl ExpectToken for Option<Token> {
 }
 
 impl ExpectToken for Token {
-    fn expect_token(self, expected: &'static [Token]) -> Result<Token, UnexpectedTokenError> {
+    fn expect_token(self, expected: &[Token]) -> Result<Token, UnexpectedTokenError> {
         if expected.iter().any(|expect| self.eq(expect)) {
             Ok(self)
         } else {
             Err(UnexpectedTokenError {
-                expected,
-                found: None,
+                expected: expected.to_vec(),
+                found: Some(self),
             })
         }
     }
