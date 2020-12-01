@@ -1,4 +1,4 @@
-use php_object_parser::parse;
+use php_literal_parser::parse;
 
 fn main() {
     let source = r###"

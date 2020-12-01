@@ -1,5 +1,5 @@
 [package]
-name = "php-object-parser"
+name = "php-literal-parser"
 version = "0.1.0"
 authors = ["Robin Appelman <robin@icewind.nl>"]
 edition = "2018"
