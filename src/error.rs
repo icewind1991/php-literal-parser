@@ -15,13 +15,16 @@ use thiserror::Error;
 /// An error and related source span, will print out the problematic code fragment and error on `Display`
 ///
 /// ## Example
-///     . |
-///     2 |     [
-///     3 |         "broken"
-///     4 |         "array"                                                                                         
-///       |         ^^^^^^^^ Unexpected token, found LiteralString expected one of [SquareClose, Comma, Arrow]
-///     5 |     ]
-///     6 |
+///
+/// ```text
+/// . |
+/// 2 |     [
+/// 3 |         "broken"
+/// 4 |         "array"                                                                                         
+///   |         ^^^^^^^^ Unexpected token, found LiteralString expected one of [SquareClose, Comma, Arrow]
+/// 5 |     ]
+/// 6 |
+/// ```
 ///
 #[derive(Debug)]
 pub struct SpannedError<'a, T: Error + Debug> {
