@@ -13,6 +13,7 @@ fn main() {
         "array" => [1,2,3,4],
         "bool" => false,
         "negative" => -1,
+        "null" => null,
     )
     "###;
 

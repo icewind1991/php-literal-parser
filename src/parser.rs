@@ -40,39 +40,25 @@ pub fn parse_lexer<'source>(
             Token::Integer,
             Token::Float,
             Token::LiteralString,
+            Token::Null,
             Token::Array,
             Token::SquareOpen,
         ])
         .with_span(lexer.span(), source)?;
     let value = match token {
-        Token::Bool => parse_literal(token, lexer.slice()).with_span(lexer.span(), source)?,
-        Token::Integer => parse_literal(token, lexer.slice()).with_span(lexer.span(), source)?,
-        Token::Float => parse_literal(token, lexer.slice()).with_span(lexer.span(), source)?,
+        Token::Bool => Value::Bool(lexer.slice().parse().with_span(lexer.span(), source)?),
+        Token::Integer => Value::Int(lexer.slice().parse().with_span(lexer.span(), source)?),
+        Token::Float => Value::Float(lexer.slice().parse().with_span(lexer.span(), source)?),
         Token::LiteralString => {
-            parse_literal(token, lexer.slice()).with_span(lexer.span(), source)?
+            Value::String(parse_string(lexer.slice()).with_span(lexer.span(), source)?)
         }
+        Token::Null => Value::Null,
         Token::Array => Value::Array(parse_array(source, lexer, ArraySyntax::Long)?),
         Token::SquareOpen => Value::Array(parse_array(source, lexer, ArraySyntax::Short)?),
         _ => unreachable!(),
     };
 
     Ok(value)
-}
-
-fn parse_literal(token: Token, slice: &str) -> Result<Value, ParseError> {
-    let token = token.expect_token(&[
-        Token::Bool,
-        Token::Integer,
-        Token::Float,
-        Token::LiteralString,
-    ])?;
-    match token {
-        Token::Bool => Ok(Value::Bool(slice.parse()?)),
-        Token::Integer => Ok(Value::Int(slice.parse()?)),
-        Token::Float => Ok(Value::Float(slice.parse()?)),
-        Token::LiteralString => Ok(Value::String(parse_string(slice)?)),
-        _ => unreachable!(),
-    }
 }
 
 fn parse_string(literal: &str) -> Result<String, UnescapeError> {
@@ -273,9 +259,9 @@ fn test_parse() {
         Value::Array(hashmap! {
             Key::String("foo".into()) => Value::Bool(true),
             Key::String("nested".into()) => Value::Array(hashmap! {
-                Key::String("foo".into()) => Value::Bool(false),
+                Key::String("foo".into()) => Value::Null,
             }),
         }),
-        parse(r#"["foo" => true, "nested" => ['foo' => false]]"#).unwrap()
+        parse(r#"["foo" => true, "nested" => ['foo' => null]]"#).unwrap()
     );
 }

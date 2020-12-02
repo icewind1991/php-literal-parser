@@ -18,13 +18,13 @@
 //! # }
 //! ```
 //!
-mod ast;
 mod error;
 mod lexer;
+mod parser;
 mod string;
 
-pub use ast::parse;
 pub use error::{ParseError, SpannedError};
+pub use parser::parse;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -37,6 +37,7 @@ pub enum Value {
     Float(f64),
     String(String),
     Array(HashMap<Key, Value>),
+    Null,
 }
 
 /// A php value, can be either a bool, int, float, string or array
@@ -46,7 +47,8 @@ pub enum Value {
 ///
 /// ## Indexing
 ///
-/// If the value is a php array, you can directly index into the `Value`, this will panic if the `Value` is not an array
+/// If the value is a php array, you can directly index into the `Value`, this will null if the `Value` is not an array
+/// or the key is not found
 ///
 /// ```rust
 /// # use maplit::hashmap;
@@ -59,6 +61,7 @@ pub enum Value {
 /// });
 /// assert_eq!(value["key"], "value");
 /// assert_eq!(value[10], false);
+/// assert!(value["not"]["found"].is_null());
 /// # }
 /// ```
 impl Value {
@@ -85,6 +88,11 @@ impl Value {
     /// Check if the value is an array
     pub fn is_array(&self) -> bool {
         matches!(self, Value::Array(_))
+    }
+
+    /// Check if the value is null
+    pub fn is_null(&self) -> bool {
+        matches!(self, Value::Null)
     }
 
     /// Convert the value into a bool if it is one
@@ -282,8 +290,8 @@ where
 
     fn index(&self, index: &Q) -> &Self::Output {
         match self {
-            Value::Array(map) => map.index(index),
-            _ => panic!("index into non array value"),
+            Value::Array(map) => map.get(index).unwrap_or(&Value::Null),
+            _ => &Value::Null,
         }
     }
 }
@@ -293,8 +301,8 @@ impl Index<Key> for Value {
 
     fn index(&self, index: Key) -> &Self::Output {
         match self {
-            Value::Array(map) => map.index(&index),
-            _ => panic!("index into non array value"),
+            Value::Array(map) => map.get(&index).unwrap_or(&Value::Null),
+            _ => &Value::Null,
         }
     }
 }
@@ -305,7 +313,7 @@ impl Index<i64> for Value {
     fn index(&self, index: i64) -> &Self::Output {
         match self {
             Value::Array(map) => map.index(&Key::Int(index)),
-            _ => panic!("index into non array value"),
+            _ => &Value::Null,
         }
     }
 }

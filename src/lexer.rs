@@ -6,6 +6,8 @@ pub enum Token {
     Array,
     #[regex("true|false")]
     Bool,
+    #[regex("null")]
+    Null,
     #[token("=>")]
     Arrow,
     #[token("(")]
@@ -43,6 +45,7 @@ fn test_lex() {
         "array" => [1,2,3,4],
         "bool" => false,
         "negative" => -1,
+        "null" => null,
     )
     "###;
     let mut lex = Token::lexer(source);
@@ -103,6 +106,11 @@ fn test_lex() {
     assert_eq!(lex.next(), Some(Token::LiteralString));
     assert_eq!(lex.next(), Some(Token::Arrow));
     assert_eq!(lex.next(), Some(Token::Integer));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::LiteralString));
+    assert_eq!(lex.next(), Some(Token::Arrow));
+    assert_eq!(lex.next(), Some(Token::Null));
     assert_eq!(lex.next(), Some(Token::Comma));
 
     assert_eq!(lex.next(), Some(Token::BracketClose));
