@@ -27,6 +27,7 @@ pub use error::{ParseError, SpannedError};
 pub use parser::parse;
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
 
@@ -134,6 +135,14 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Get the value as &str if it is a string
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Value::String(str) => Some(str.as_str()),
+            _ => None,
+        }
+    }
 }
 
 impl PartialEq<bool> for Value {
@@ -208,6 +217,25 @@ impl From<String> for Value {
 impl From<&str> for Value {
     fn from(value: &str) -> Self {
         Value::String(value.into())
+    }
+}
+
+impl Display for Value {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::Bool(val) => write!(f, "{}", val),
+            Value::Int(val) => write!(f, "{}", val),
+            Value::Float(val) => write!(f, "{}", val),
+            Value::String(val) => write!(f, "{}", val),
+            Value::Array(val) => {
+                write!(f, "[\n")?;
+                for (key, value) in val.iter() {
+                    write!(f, "\t{} => {},", key, value)?;
+                }
+                write!(f, "]")
+            }
+            Value::Null => write!(f, "null"),
+        }
     }
 }
 
@@ -314,6 +342,15 @@ impl Index<i64> for Value {
         match self {
             Value::Array(map) => map.index(&Key::Int(index)),
             _ => &Value::Null,
+        }
+    }
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Key::Int(val) => write!(f, "{}", val),
+            Key::String(val) => write!(f, "{}", val),
         }
     }
 }
