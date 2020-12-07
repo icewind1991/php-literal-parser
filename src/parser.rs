@@ -47,7 +47,13 @@ pub fn parse_lexer<'source>(
         ])
         .with_span(lexer.span(), source)?;
     let value = match token {
-        Token::Bool => Value::Bool(lexer.slice().parse().with_span(lexer.span(), source)?),
+        Token::Bool => Value::Bool(
+            lexer
+                .slice()
+                .to_ascii_lowercase()
+                .parse()
+                .with_span(lexer.span(), source)?,
+        ),
         Token::Integer => Value::Int(parse_int(lexer.slice()).with_span(lexer.span(), source)?),
         Token::Float => Value::Float(lexer.slice().parse().with_span(lexer.span(), source)?),
         Token::LiteralString => {
@@ -282,4 +288,5 @@ fn test_parse() {
     assert_eq!(Value::Int(26), parse(r#"0x1A"#).unwrap());
     assert_eq!(Value::Int(3), parse(r#"0b11"#).unwrap());
     assert_eq!(Value::Int(12345), parse(r#"12_34_5"#).unwrap());
+    assert_eq!(Value::Bool(true), parse(r#"True"#).unwrap());
 }

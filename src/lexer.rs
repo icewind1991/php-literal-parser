@@ -4,7 +4,7 @@ use logos::Logos;
 pub enum Token {
     #[token("array")]
     Array,
-    #[regex("true|false")]
+    #[regex("(?i:true|false)")]
     Bool,
     #[regex("null")]
     Null,
