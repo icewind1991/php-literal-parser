@@ -24,7 +24,7 @@ pub enum Token {
     LiteralString,
     #[regex("-?[0-9]*\\.[0-9]+")]
     Float,
-    #[regex("-?[0-9]+")]
+    #[regex("-?(0|[1-9][0-9]*(_[0-9]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*|0[0-7]+(_[0-7]+)*|0[bB][01]+(_[01]+)*)")]
     Integer,
     #[error]
     #[regex(r"[ \t\n\f]+", logos::skip)]
@@ -115,5 +115,29 @@ fn test_lex() {
 
     assert_eq!(lex.next(), Some(Token::BracketClose));
 
+    assert_eq!(lex.next(), None);
+}
+
+#[test]
+fn test_lex_int() {
+    let source = r###"0,123,0x123,0123,0b111,12_34_56"###;
+    let mut lex = Token::lexer(source);
+
+    assert_eq!(lex.next(), Some(Token::Integer));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::Integer));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::Integer));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::Integer));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::Integer));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::Integer));
     assert_eq!(lex.next(), None);
 }
