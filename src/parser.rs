@@ -5,7 +5,7 @@ use crate::string::{unescape_double, unescape_single, UnescapeError};
 use crate::{Key, Value};
 use logos::{Lexer, Logos};
 use std::collections::HashMap;
-use std::num::ParseIntError;
+use std::num::{ParseFloatError, ParseIntError};
 
 /// Parse a php literal
 ///
@@ -55,7 +55,7 @@ pub fn parse_lexer<'source>(
                 .with_span(lexer.span(), source)?,
         ),
         Token::Integer => Value::Int(parse_int(lexer.slice()).with_span(lexer.span(), source)?),
-        Token::Float => Value::Float(lexer.slice().parse().with_span(lexer.span(), source)?),
+        Token::Float => Value::Float(parse_float(lexer.slice()).with_span(lexer.span(), source)?),
         Token::LiteralString => {
             Value::String(parse_string(lexer.slice()).with_span(lexer.span(), source)?)
         }
@@ -89,6 +89,11 @@ fn parse_int(literal: &str) -> Result<i64, ParseIntError> {
         }
         tail => i64::from_str_radix(std::str::from_utf8(tail).unwrap(), 10),
     }
+}
+
+fn parse_float(literal: &str) -> Result<f64, ParseFloatError> {
+    let stripped = literal.replace('_', "");
+    stripped.parse()
 }
 
 #[derive(Default)]
@@ -288,5 +293,12 @@ fn test_parse() {
     assert_eq!(Value::Int(26), parse(r#"0x1A"#).unwrap());
     assert_eq!(Value::Int(3), parse(r#"0b11"#).unwrap());
     assert_eq!(Value::Int(12345), parse(r#"12_34_5"#).unwrap());
+
     assert_eq!(Value::Bool(true), parse(r#"True"#).unwrap());
+
+    assert_eq!(Value::Float(-432.0), parse(r#"-432.0"#).unwrap());
+    assert_eq!(Value::Float(0.12), parse(r#".12"#).unwrap());
+    assert_eq!(Value::Float(1000.0), parse(r#"10e2"#).unwrap());
+    assert_eq!(Value::Float(1.0), parse(r#"10e-1"#).unwrap());
+    assert_eq!(Value::Float(1234.5), parse(r#"12_34.5"#).unwrap());
 }
