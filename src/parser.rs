@@ -2,7 +2,7 @@ use crate::error::UnexpectedTokenError;
 use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
 use crate::lexer::Token;
 use crate::num::parse_int;
-use crate::string::{unescape_double, unescape_single, UnescapeError};
+use crate::string::parse_string;
 use crate::{Key, Value};
 use logos::{Lexer, Logos};
 use std::collections::HashMap;
@@ -67,17 +67,6 @@ pub fn parse_lexer<'source>(
     };
 
     Ok(value)
-}
-
-fn parse_string(literal: &str) -> Result<String, UnescapeError> {
-    let single_quote = literal.bytes().next().unwrap() == b'\'';
-    let inner = &literal[1..(literal.len()) - 1];
-
-    if single_quote {
-        unescape_single(inner)
-    } else {
-        unescape_double(inner)
-    }
 }
 
 fn parse_float(literal: &str) -> Result<f64, ParseFloatError> {

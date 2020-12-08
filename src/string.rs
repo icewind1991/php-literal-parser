@@ -12,10 +12,6 @@ struct UnescapeState {
 }
 
 impl UnescapeState {
-    fn new() -> UnescapeState {
-        UnescapeState { out: Vec::new() }
-    }
-
     fn with_capacity(capacity: usize) -> UnescapeState {
         UnescapeState {
             out: Vec::with_capacity(capacity),
@@ -71,104 +67,104 @@ fn parse_u32(
     Ok(result)
 }
 
-fn handle_single_escape<'a>(
-    bytes: &'a [u8],
-    state: &mut UnescapeState,
-) -> UnescapeResult<&'a [u8]> {
-    let mut ins = PeekableBytes::new(bytes);
-    debug_assert_eq!(ins.next(), Some(b'\\'));
-    match ins.next() {
-        None => {
-            return Err(UnescapeError);
-        }
-        Some(d) => match d {
-            b'\\' | b'\'' => state.push_u8(d),
-            _ => {
-                state.push_u8(b'\\');
-                state.push_u8(d)
+trait EscapedString {
+    fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]>;
+}
+
+struct SingleQuoteString;
+
+impl EscapedString for SingleQuoteString {
+    fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]> {
+        let mut ins = PeekableBytes::new(bytes);
+        debug_assert_eq!(ins.next(), Some(b'\\'));
+        match ins.next() {
+            None => {
+                return Err(UnescapeError);
             }
-        },
-    }
-    Ok(ins.as_slice())
-}
-
-/// Un-escape a string, following php single quote rules
-pub fn unescape_single(s: &str) -> UnescapeResult<String> {
-    let mut state = UnescapeState::with_capacity(s.len());
-    let mut bytes = s.as_bytes();
-    while let Some(escape_index) = memchr::memchr(b'\\', bytes) {
-        state.push_slice(&bytes[0..escape_index]);
-        bytes = &bytes[escape_index..];
-        bytes = handle_single_escape(bytes, &mut state)?;
-    }
-
-    state.push_slice(&bytes[0..]);
-
-    Ok(state.finalize())
-}
-
-fn handle_double_escape<'a>(
-    bytes: &'a [u8],
-    state: &mut UnescapeState,
-) -> UnescapeResult<&'a [u8]> {
-    let mut ins = PeekableBytes::new(bytes);
-    debug_assert_eq!(ins.next(), Some(b'\\'));
-    match ins.next() {
-        None => {
-            return Err(UnescapeError);
-        }
-        Some(d) => {
-            match d {
-                b'$' | b'"' | b'\\' => state.push_u8(d),
-                b'n' => state.push_u8(b'\n'),   // linefeed
-                b'r' => state.push_u8(b'\r'),   // carriage return
-                b't' => state.push_u8(b'\t'),   // tab
-                b'v' => state.push_u8(b'\x0B'), // vertical tab
-                b'f' => state.push_u8(b'\x0C'), // form feed
-                b'x' => {
-                    let val = parse_u32(&mut ins, 16, 0, Some(2))?;
-                    state.push_raw(val)?;
-                }
-                b'u' => match ins.next() {
-                    Some(b'{') => {
-                        let val = parse_u32(&mut ins, 16, 0, None)?;
-                        state.push_raw(val)?;
-                        if !matches!(ins.next(), Some(b'}')) {
-                            return Err(UnescapeError);
-                        }
-                    }
-                    Some(d) => {
-                        state.push_u8(b'\\');
-                        state.push_u8(b'u');
-                        state.push_u8(d);
-                    }
-                    None => {
-                        state.push_u8(b'\\');
-                        state.push_u8(d);
-                    }
-                },
-                b'0'..=b'7' => {
-                    let val = parse_u32(&mut ins, 8, (d as char).to_digit(8).unwrap(), Some(3))?;
-                    state.push_raw(val)?;
-                }
+            Some(d) => match d {
+                b'\\' | b'\'' => state.push_u8(d),
                 _ => {
                     state.push_u8(b'\\');
                     state.push_u8(d)
                 }
-            }
+            },
         }
+        Ok(ins.as_slice())
     }
-    Ok(ins.as_slice())
 }
 
-/// Un-escape a string, following php double quote rules
-pub fn unescape_double(s: &str) -> UnescapeResult<String> {
+struct DoubleQuoteString;
+
+impl EscapedString for DoubleQuoteString {
+    fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]> {
+        let mut ins = PeekableBytes::new(bytes);
+        debug_assert_eq!(ins.next(), Some(b'\\'));
+        match ins.next() {
+            None => {
+                return Err(UnescapeError);
+            }
+            Some(d) => {
+                match d {
+                    b'$' | b'"' | b'\\' => state.push_u8(d),
+                    b'n' => state.push_u8(b'\n'),   // linefeed
+                    b'r' => state.push_u8(b'\r'),   // carriage return
+                    b't' => state.push_u8(b'\t'),   // tab
+                    b'v' => state.push_u8(b'\x0B'), // vertical tab
+                    b'f' => state.push_u8(b'\x0C'), // form feed
+                    b'x' => {
+                        let val = parse_u32(&mut ins, 16, 0, Some(2))?;
+                        state.push_raw(val)?;
+                    }
+                    b'u' => match ins.next() {
+                        Some(b'{') => {
+                            let val = parse_u32(&mut ins, 16, 0, None)?;
+                            state.push_raw(val)?;
+                            if !matches!(ins.next(), Some(b'}')) {
+                                return Err(UnescapeError);
+                            }
+                        }
+                        Some(d) => {
+                            state.push_u8(b'\\');
+                            state.push_u8(b'u');
+                            state.push_u8(d);
+                        }
+                        None => {
+                            state.push_u8(b'\\');
+                            state.push_u8(d);
+                        }
+                    },
+                    b'0'..=b'7' => {
+                        let val =
+                            parse_u32(&mut ins, 8, (d as char).to_digit(8).unwrap(), Some(3))?;
+                        state.push_raw(val)?;
+                    }
+                    _ => {
+                        state.push_u8(b'\\');
+                        state.push_u8(d)
+                    }
+                }
+            }
+        }
+        Ok(ins.as_slice())
+    }
+}
+
+pub fn parse_string(literal: &str) -> Result<String, UnescapeError> {
+    let inner = &literal[1..(literal.len()) - 1];
+    if literal.bytes().next().unwrap() == b'\'' {
+        unescape::<SingleQuoteString>(inner)
+    } else {
+        unescape::<DoubleQuoteString>(inner)
+    }
+}
+
+fn unescape<S: EscapedString>(s: &str) -> UnescapeResult<String> {
     let mut state = UnescapeState::with_capacity(s.len());
     let mut bytes = s.as_bytes();
     while let Some(escape_index) = memchr::memchr(b'\\', bytes) {
         state.push_slice(&bytes[0..escape_index]);
         bytes = &bytes[escape_index..];
-        bytes = handle_double_escape(bytes, &mut state)?;
+        bytes = S::handle_escape(bytes, &mut state)?;
     }
 
     state.push_slice(&bytes[0..]);
@@ -211,44 +207,95 @@ mod tests {
 
     #[test]
     fn test_unescape_single() {
-        assert_eq!(unescape_single(&r#"abc"#), Ok("abc".into()));
-        assert_eq!(unescape_single(&r#"ab\nc"#), Ok("ab\\nc".into()));
-        assert_eq!(unescape_single(r#"ab\zc"#), Ok("ab\\zc".into()));
-        assert_eq!(unescape_single(r#" \"abc\" "#), Ok(" \\\"abc\\\" ".into()));
-        assert_eq!(unescape_single(r#"𝄞"#), Ok("𝄞".into()));
-        assert_eq!(unescape_single(r#"\𝄞"#), Ok("\\𝄞".into()));
+        assert_eq!(unescape::<SingleQuoteString>(&r#"abc"#), Ok("abc".into()));
         assert_eq!(
-            unescape_single(r#"\xD834\xDD1E"#),
+            unescape::<SingleQuoteString>(&r#"ab\nc"#),
+            Ok("ab\\nc".into())
+        );
+        assert_eq!(
+            unescape::<SingleQuoteString>(r#"ab\zc"#),
+            Ok("ab\\zc".into())
+        );
+        assert_eq!(
+            unescape::<SingleQuoteString>(r#" \"abc\" "#),
+            Ok(" \\\"abc\\\" ".into())
+        );
+        assert_eq!(unescape::<SingleQuoteString>(r#"𝄞"#), Ok("𝄞".into()));
+        assert_eq!(unescape::<SingleQuoteString>(r#"\𝄞"#), Ok("\\𝄞".into()));
+        assert_eq!(
+            unescape::<SingleQuoteString>(r#"\xD834\xDD1E"#),
             Ok("\\xD834\\xDD1E".into())
         );
-        assert_eq!(unescape_single(r#"\xD834"#), Ok("\\xD834".into()));
-        assert_eq!(unescape_single(r#"\xDD1E"#), Ok("\\xDD1E".into()));
-        assert_eq!(unescape_single("\t"), Ok("\t".into()));
+        assert_eq!(
+            unescape::<SingleQuoteString>(r#"\xD834"#),
+            Ok("\\xD834".into())
+        );
+        assert_eq!(
+            unescape::<SingleQuoteString>(r#"\xDD1E"#),
+            Ok("\\xDD1E".into())
+        );
+        assert_eq!(unescape::<SingleQuoteString>("\t"), Ok("\t".into()));
     }
 
     #[test]
     fn test_unescape_double() {
-        assert_eq!(unescape_double(&r#"abc"#), Ok("abc".into()));
-        assert_eq!(unescape_double(&r#"ab\nc"#), Ok("ab\nc".into()));
-        assert_eq!(unescape_double(r#"ab\zc"#), Ok("ab\\zc".into()));
-        assert_eq!(unescape_double(r#" \"abc\" "#), Ok(" \"abc\" ".into()));
-        assert_eq!(unescape_double(r#"𝄞"#), Ok("𝄞".into()));
-        assert_eq!(unescape_double(r#"\𝄞"#), Ok("\\𝄞".into()));
-        assert_eq!(unescape_double(r#"\u{1D11E}"#), Ok("𝄞".into()));
-        assert_eq!(unescape_double(r#"\xD834"#), Ok("\u{D8}34".into()));
-        assert_eq!(unescape_double(r#"\xDD1E"#), Ok("\u{DD}1E".into()));
-        assert_eq!(unescape_double(r#"\xD"#), Ok("\u{D}".into()));
-        assert_eq!(unescape_double("\t"), Ok("\t".into()));
-        assert_eq!(unescape_double(r#"\u{D834"#), Err(UnescapeError));
-        assert_eq!(unescape_double(r#"\uD834"#), Ok("\\uD834".into()));
-        assert_eq!(unescape_double(r#"\u"#), Ok("\\u".into()));
-        assert_eq!(unescape_double(r#"\47foo"#), Ok("'foo".into()));
-        assert_eq!(unescape_double(r#"\48foo"#), Ok("\u{4}8foo".into()));
-        assert_eq!(unescape_double(r#"\87foo"#), Ok("\\87foo".into()));
-
-        assert_eq!(unescape_double(r#"\u{999999}"#), Err(UnescapeError));
+        assert_eq!(unescape::<DoubleQuoteString>(&r#"abc"#), Ok("abc".into()));
         assert_eq!(
-            unescape_double(r#"\u{999999999999999999}"#),
+            unescape::<DoubleQuoteString>(&r#"ab\nc"#),
+            Ok("ab\nc".into())
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"ab\zc"#),
+            Ok("ab\\zc".into())
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#" \"abc\" "#),
+            Ok(" \"abc\" ".into())
+        );
+        assert_eq!(unescape::<DoubleQuoteString>(r#"𝄞"#), Ok("𝄞".into()));
+        assert_eq!(unescape::<DoubleQuoteString>(r#"\𝄞"#), Ok("\\𝄞".into()));
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\u{1D11E}"#),
+            Ok("𝄞".into())
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\xD834"#),
+            Ok("\u{D8}34".into())
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\xDD1E"#),
+            Ok("\u{DD}1E".into())
+        );
+        assert_eq!(unescape::<DoubleQuoteString>(r#"\xD"#), Ok("\u{D}".into()));
+        assert_eq!(unescape::<DoubleQuoteString>("\t"), Ok("\t".into()));
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\u{D834"#),
+            Err(UnescapeError)
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\uD834"#),
+            Ok("\\uD834".into())
+        );
+        assert_eq!(unescape::<DoubleQuoteString>(r#"\u"#), Ok("\\u".into()));
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\47foo"#),
+            Ok("'foo".into())
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\48foo"#),
+            Ok("\u{4}8foo".into())
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\87foo"#),
+            Ok("\\87foo".into())
+        );
+
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\u{999999}"#),
+            Err(UnescapeError)
+        );
+        assert_eq!(
+            unescape::<DoubleQuoteString>(r#"\u{999999999999999999}"#),
             Err(UnescapeError)
         );
     }
