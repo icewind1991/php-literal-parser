@@ -1,6 +1,6 @@
 /// unescaping php string literals borrowed mostly from `escape8259`
 use std::char::decode_utf16;
-use std::iter::Peekable;
+use std::iter::{once, Peekable};
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 
@@ -41,10 +41,9 @@ impl UnescapeState {
         match (self.stash, surrogate) {
             (0, false) => {
                 // The std library only provides utf16 decode of an iterator,
-                // so to decode a single character we wrap it in an array.
+                // so to decode a single character we wrap it in a `once`.
                 // Hopefully the compiler will elide most of this extra work.
-                let words = [x];
-                match decode_utf16(words.iter().copied()).next() {
+                match decode_utf16(once(x)).next() {
                     Some(Ok(c)) => {
                         self.out.push(c);
                     }

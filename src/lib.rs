@@ -20,6 +20,7 @@
 //!
 mod error;
 mod lexer;
+mod num;
 mod parser;
 mod string;
 

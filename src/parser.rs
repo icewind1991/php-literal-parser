@@ -1,11 +1,12 @@
 use crate::error::UnexpectedTokenError;
 use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
 use crate::lexer::Token;
+use crate::num::parse_int;
 use crate::string::{unescape_double, unescape_single, UnescapeError};
 use crate::{Key, Value};
 use logos::{Lexer, Logos};
 use std::collections::HashMap;
-use std::num::{ParseFloatError, ParseIntError};
+use std::num::ParseFloatError;
 
 /// Parse a php literal
 ///
@@ -76,18 +77,6 @@ fn parse_string(literal: &str) -> Result<String, UnescapeError> {
         unescape_single(inner)
     } else {
         unescape_double(inner)
-    }
-}
-
-fn parse_int(literal: &str) -> Result<i64, ParseIntError> {
-    let stripped = literal.replace('_', "");
-    match stripped.as_bytes() {
-        [b'0', b'x', tail @ ..] => i64::from_str_radix(std::str::from_utf8(tail).unwrap(), 16),
-        [b'0', b'b', tail @ ..] => i64::from_str_radix(std::str::from_utf8(tail).unwrap(), 2),
-        [b'0', tail @ ..] if tail.len() > 0 => {
-            i64::from_str_radix(std::str::from_utf8(tail).unwrap(), 8)
-        }
-        tail => i64::from_str_radix(std::str::from_utf8(tail).unwrap(), 10),
     }
 }
 

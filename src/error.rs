@@ -1,4 +1,5 @@
 use crate::lexer::Token;
+use crate::num::ParseIntError;
 use crate::string::UnescapeError;
 use crate::Value;
 use logos::Span;
@@ -8,7 +9,7 @@ use source_span::{
 };
 use std::error::Error;
 use std::fmt::{self, Debug, Display};
-use std::num::{ParseFloatError, ParseIntError};
+use std::num::ParseFloatError;
 use std::str::ParseBoolError;
 use thiserror::Error;
 
