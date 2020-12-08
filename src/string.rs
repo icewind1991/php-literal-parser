@@ -71,34 +71,46 @@ fn parse_u32(
     Ok(result)
 }
 
+fn handle_single_escape<'a>(
+    bytes: &'a [u8],
+    state: &mut UnescapeState,
+) -> UnescapeResult<&'a [u8]> {
+    let mut ins = PeekableBytes::new(bytes);
+    debug_assert_eq!(ins.next(), Some(b'\\'));
+    match ins.next() {
+        None => {
+            return Err(UnescapeError);
+        }
+        Some(d) => match d {
+            b'\\' | b'\'' => state.push_u8(d),
+            _ => {
+                state.push_u8(b'\\');
+                state.push_u8(d)
+            }
+        },
+    }
+    Ok(ins.as_slice())
+}
+
 /// Un-escape a string, following php single quote rules
 pub fn unescape_single(s: &str) -> UnescapeResult<String> {
-    let mut state = UnescapeState::new();
-    let mut ins = s.chars();
-
-    while let Some(c) = ins.next() {
-        if c == '\\' {
-            match ins.next() {
-                None => {
-                    return Err(UnescapeError);
-                }
-                Some(d) => match d {
-                    '\\' | '\'' => state.push_char(d),
-                    _ => {
-                        state.push_char('\\');
-                        state.push_char(d)
-                    }
-                },
-            }
-        } else {
-            state.push_char(c);
-        }
+    let mut state = UnescapeState::with_capacity(s.len());
+    let mut bytes = s.as_bytes();
+    while let Some(escape_index) = memchr::memchr(b'\\', bytes) {
+        state.push_slice(&bytes[0..escape_index]);
+        bytes = &bytes[escape_index..];
+        bytes = handle_single_escape(bytes, &mut state)?;
     }
+
+    state.push_slice(&bytes[0..]);
 
     Ok(state.finalize())
 }
 
-fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]> {
+fn handle_double_escape<'a>(
+    bytes: &'a [u8],
+    state: &mut UnescapeState,
+) -> UnescapeResult<&'a [u8]> {
     let mut ins = PeekableBytes::new(bytes);
     debug_assert_eq!(ins.next(), Some(b'\\'));
     match ins.next() {
@@ -156,7 +168,7 @@ pub fn unescape_double(s: &str) -> UnescapeResult<String> {
     while let Some(escape_index) = memchr::memchr(b'\\', bytes) {
         state.push_slice(&bytes[0..escape_index]);
         bytes = &bytes[escape_index..];
-        bytes = handle_escape(bytes, &mut state)?;
+        bytes = handle_double_escape(bytes, &mut state)?;
     }
 
     state.push_slice(&bytes[0..]);

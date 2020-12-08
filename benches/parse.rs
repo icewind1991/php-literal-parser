@@ -15,7 +15,7 @@ fn perf_parse_int_basic(b: &mut Bencher) {
 }
 
 #[bench]
-fn perf_str_basic(b: &mut Bencher) {
+fn perf_str_double_basic(b: &mut Bencher) {
     let input = r#""aut dolores excepturi rerum est velit ad natus eveniet quo tenetur et fugiat sit velit ipsam nesciunt sint et architecto""#;
 
     b.iter(|| {
@@ -24,8 +24,26 @@ fn perf_str_basic(b: &mut Bencher) {
 }
 
 #[bench]
-fn perf_str_escape(b: &mut Bencher) {
+fn perf_str_double_escape(b: &mut Bencher) {
     let input = r#""aut dolores excepturi rerum est velit ad natus \"eveniet\" quo tenetur et fugiat sit velit ipsam nesciunt sint et architecto""#;
+
+    b.iter(|| {
+        assert!(parse(input).unwrap().is_string());
+    });
+}
+
+#[bench]
+fn perf_str_single_basic(b: &mut Bencher) {
+    let input = r#"'aut dolores excepturi rerum est velit ad natus eveniet quo tenetur et fugiat sit velit ipsam nesciunt sint et architecto'"#;
+
+    b.iter(|| {
+        assert!(parse(input).unwrap().is_string());
+    });
+}
+
+#[bench]
+fn perf_str_single_escape(b: &mut Bencher) {
+    let input = r#"'aut dolores excepturi rerum est velit ad natus \"eveniet\" quo tenetur et fugiat sit velit ipsam nesciunt sint et architecto'"#;
 
     b.iter(|| {
         assert!(parse(input).unwrap().is_string());
