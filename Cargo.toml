@@ -12,6 +12,7 @@ documentation = "https://docs.rs/php-literal-parser"
 logos = "0.11"
 thiserror = "1.0"
 source-span = "2.2"
+memchr = "2.3.4"
 
 [dev-dependencies]
 maplit = "1.0.2"

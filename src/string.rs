@@ -1,7 +1,3 @@
-/// unescaping php string literals borrowed mostly from `escape8259`
-use std::char::decode_utf16;
-use std::iter::{once, Peekable};
-
 #[derive(Debug, Clone, Eq, PartialEq)]
 
 /// An error occurred while
@@ -12,100 +8,61 @@ type UnescapeResult<T> = Result<T, UnescapeError>;
 // Used to collect output characters and queue u16 values for translation.
 struct UnescapeState {
     // The accumulated characters
-    out: String,
-    // Store a fragment of a large character for later decoding
-    stash: u16,
+    out: Vec<u8>,
 }
 
 impl UnescapeState {
     fn new() -> UnescapeState {
+        UnescapeState { out: Vec::new() }
+    }
+
+    fn with_capacity(capacity: usize) -> UnescapeState {
         UnescapeState {
-            out: String::new(),
-            stash: 0,
+            out: Vec::with_capacity(capacity),
         }
     }
 
     // Collect a new character
-    fn push_char(&mut self, c: char) -> UnescapeResult<()> {
-        if self.stash != 0 {
-            return Err(UnescapeError);
-        }
+    fn push_char(&mut self, c: char) {
+        let mut buff = [0; 8];
+        self.out
+            .extend_from_slice(c.encode_utf8(&mut buff).as_bytes());
+    }
+
+    fn push_u8(&mut self, c: u8) {
         self.out.push(c);
-        Ok(())
     }
 
-    // Collect a new UTF16 word.  This can either be one whole character,
-    // or part of a larger character.
-    fn push_u16(&mut self, x: u16) -> UnescapeResult<()> {
-        let surrogate = x >= 0xD800 && x <= 0xDFFF;
-        match (self.stash, surrogate) {
-            (0, false) => {
-                // The std library only provides utf16 decode of an iterator,
-                // so to decode a single character we wrap it in a `once`.
-                // Hopefully the compiler will elide most of this extra work.
-                match decode_utf16(once(x)).next() {
-                    Some(Ok(c)) => {
-                        self.out.push(c);
-                    }
-                    _ => return Err(UnescapeError),
-                }
-            }
-            (0, true) => self.stash = x,
-            (_, false) => {
-                return Err(UnescapeError);
-            }
-            (w, true) => {
-                let words = [w, x];
-                match decode_utf16(words.iter().copied()).next() {
-                    Some(Ok(c)) => {
-                        self.out.push(c);
-                        self.stash = 0;
-                    }
-                    _ => return Err(UnescapeError),
-                }
-            }
+    fn push_raw(&mut self, c: u32) -> UnescapeResult<()> {
+        match std::char::from_u32(c) {
+            Some(c) => Ok(self.push_char(c)),
+            None => Err(UnescapeError),
         }
-        Ok(())
     }
 
-    // If we queued up part of a UTF-16 encoded word but didn't
-    // finish it, return an error.  Otherwise, consume self and
-    // return the accumulated String.
-    fn finalize(self) -> UnescapeResult<String> {
-        if self.stash != 0 {
-            return Err(UnescapeError);
-        }
-        Ok(self.out)
+    fn push_slice(&mut self, slice: &[u8]) {
+        self.out.extend_from_slice(slice);
+    }
+
+    fn finalize(self) -> String {
+        // this is safe because we only push bytes into the buffer that either
+        //   - come from the source &str, and are delimited a \
+        //   - are validated unicode points, utf8 encoded
+        unsafe { String::from_utf8_unchecked(self.out) }
     }
 }
 
-fn parse_u16_hex<S>(s: &mut Peekable<S>, max: Option<u8>) -> UnescapeResult<u16>
-where
-    S: Iterator<Item = char>,
-{
-    let mut result = 0;
+fn parse_u32(
+    s: &mut PeekableBytes,
+    radix: u32,
+    mut result: u32,
+    max: Option<u8>,
+) -> UnescapeResult<u32> {
     let mut max = max.unwrap_or(u8::max_value());
-    while s.peek().map(|c| c.is_ascii_hexdigit()).unwrap_or_default() {
-        result *= 16;
-        result += s.next().unwrap().to_digit(16).unwrap() as u16;
-        max -= 1;
-        if max == 0 {
-            break;
-        }
-    }
-    Ok(result)
-}
-
-fn parse_u16_oct<S>(s: &mut Peekable<S>, mut result: u16, max: Option<u8>) -> UnescapeResult<u16>
-where
-    S: Iterator<Item = char>,
-{
-    let mut max = max.unwrap_or(u8::max_value());
-    while s.peek().map(|c| c >= &'1' && c <= &'7').unwrap_or_default() {
-        let digit = s.next().unwrap();
-        dbg!(digit);
-        result *= 8;
-        result += digit.to_digit(8).unwrap() as u16;
+    while let Some(digit) = s.peek().and_then(|digit| (digit as char).to_digit(radix)) {
+        let _ = s.next(); // consume the digit we peeked
+        result = result.checked_mul(radix).ok_or(UnescapeError)?;
+        result = result.checked_add(digit).ok_or(UnescapeError)?;
         max -= 1;
         if max == 0 {
             break;
@@ -126,80 +83,114 @@ pub fn unescape_single(s: &str) -> UnescapeResult<String> {
                     return Err(UnescapeError);
                 }
                 Some(d) => match d {
-                    '\\' | '\'' => state.push_char(d)?,
+                    '\\' | '\'' => state.push_char(d),
                     _ => {
-                        state.push_char('\\')?;
-                        state.push_char(d)?
+                        state.push_char('\\');
+                        state.push_char(d)
                     }
                 },
             }
         } else {
-            state.push_char(c)?;
+            state.push_char(c);
         }
     }
 
-    state.finalize()
+    Ok(state.finalize())
+}
+
+fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]> {
+    let mut ins = PeekableBytes::new(bytes);
+    debug_assert_eq!(ins.next(), Some(b'\\'));
+    match ins.next() {
+        None => {
+            return Err(UnescapeError);
+        }
+        Some(d) => {
+            match d {
+                b'$' | b'"' | b'\\' => state.push_u8(d),
+                b'n' => state.push_u8(b'\n'),   // linefeed
+                b'r' => state.push_u8(b'\r'),   // carriage return
+                b't' => state.push_u8(b'\t'),   // tab
+                b'v' => state.push_u8(b'\x0B'), // vertical tab
+                b'f' => state.push_u8(b'\x0C'), // form feed
+                b'x' => {
+                    let val = parse_u32(&mut ins, 16, 0, Some(2))?;
+                    state.push_raw(val)?;
+                }
+                b'u' => match ins.next() {
+                    Some(b'{') => {
+                        let val = parse_u32(&mut ins, 16, 0, None)?;
+                        state.push_raw(val)?;
+                        if !matches!(ins.next(), Some(b'}')) {
+                            return Err(UnescapeError);
+                        }
+                    }
+                    Some(d) => {
+                        state.push_u8(b'\\');
+                        state.push_u8(b'u');
+                        state.push_u8(d);
+                    }
+                    None => {
+                        state.push_u8(b'\\');
+                        state.push_u8(d);
+                    }
+                },
+                b'0'..=b'7' => {
+                    let val = parse_u32(&mut ins, 8, (d as char).to_digit(8).unwrap(), Some(3))?;
+                    state.push_raw(val)?;
+                }
+                _ => {
+                    state.push_u8(b'\\');
+                    state.push_u8(d)
+                }
+            }
+        }
+    }
+    Ok(ins.as_slice())
 }
 
 /// Un-escape a string, following php double quote rules
 pub fn unescape_double(s: &str) -> UnescapeResult<String> {
-    let mut state = UnescapeState::new();
-    let mut ins = s.chars().peekable();
-
-    while let Some(c) = ins.next() {
-        if c == '\\' {
-            match ins.next() {
-                None => {
-                    return Err(UnescapeError);
-                }
-                Some(d) => {
-                    match d {
-                        '$' | '"' | '\\' => state.push_char(d)?,
-                        'n' => state.push_char('\n')?,   // linefeed
-                        'r' => state.push_char('\r')?,   // carriage return
-                        't' => state.push_char('\t')?,   // tab
-                        'v' => state.push_char('\x0B')?, // vertical tab
-                        'f' => state.push_char('\x0C')?, // form feed
-                        'x' => {
-                            let val = parse_u16_hex(&mut ins, Some(2))?;
-                            state.push_u16(val)?;
-                        }
-                        'u' => match ins.next() {
-                            Some('{') => {
-                                let val = parse_u16_hex(&mut ins, None)?;
-                                state.push_u16(val)?;
-                                if !matches!(ins.next(), Some('}')) {
-                                    return Err(UnescapeError);
-                                }
-                            }
-                            Some(d) => {
-                                state.push_char('\\')?;
-                                state.push_char('u')?;
-                                state.push_char(d)?;
-                            }
-                            None => {
-                                state.push_char('\\')?;
-                                state.push_char(d)?;
-                            }
-                        },
-                        '0'..='7' => {
-                            let val =
-                                parse_u16_oct(&mut ins, d.to_digit(8).unwrap() as u16, Some(3))?;
-                            state.push_u16(val)?;
-                        }
-                        _ => {
-                            state.push_char('\\')?;
-                            state.push_char(d)?
-                        }
-                    }
-                }
-            }
-        } else {
-            state.push_char(c)?;
-        }
+    let mut state = UnescapeState::with_capacity(s.len());
+    let mut bytes = s.as_bytes();
+    while let Some(escape_index) = memchr::memchr(b'\\', bytes) {
+        state.push_slice(&bytes[0..escape_index]);
+        bytes = &bytes[escape_index..];
+        bytes = handle_escape(bytes, &mut state)?;
     }
 
-    state.finalize()
+    state.push_slice(&bytes[0..]);
+
+    Ok(state.finalize())
+}
+
+struct PeekableBytes<'a> {
+    slice: &'a [u8],
+    pos: usize,
+}
+
+impl<'a> Iterator for PeekableBytes<'a> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let byte = self.slice.get(self.pos)?;
+        self.pos += 1;
+        Some(*byte)
+    }
+}
+
+impl<'a> PeekableBytes<'a> {
+    pub fn new(slice: &'a [u8]) -> Self {
+        PeekableBytes { slice, pos: 0 }
+    }
+
+    pub fn peek(&self) -> Option<u8> {
+        self.slice.get(self.pos).copied()
+    }
+
+    pub fn as_slice(self) -> &'a [u8] {
+        &self.slice[self.pos..]
+    }
 }
 
 #[cfg(test)]
@@ -231,7 +222,7 @@ mod tests {
         assert_eq!(unescape_double(r#" \"abc\" "#), Ok(" \"abc\" ".into()));
         assert_eq!(unescape_double(r#"𝄞"#), Ok("𝄞".into()));
         assert_eq!(unescape_double(r#"\𝄞"#), Ok("\\𝄞".into()));
-        assert_eq!(unescape_double(r#"\u{D834}\u{DD1E}"#), Ok("𝄞".into()));
+        assert_eq!(unescape_double(r#"\u{1D11E}"#), Ok("𝄞".into()));
         assert_eq!(unescape_double(r#"\xD834"#), Ok("\u{D8}34".into()));
         assert_eq!(unescape_double(r#"\xDD1E"#), Ok("\u{DD}1E".into()));
         assert_eq!(unescape_double(r#"\xD"#), Ok("\u{D}".into()));
@@ -242,5 +233,11 @@ mod tests {
         assert_eq!(unescape_double(r#"\47foo"#), Ok("'foo".into()));
         assert_eq!(unescape_double(r#"\48foo"#), Ok("\u{4}8foo".into()));
         assert_eq!(unescape_double(r#"\87foo"#), Ok("\\87foo".into()));
+
+        assert_eq!(unescape_double(r#"\u{999999}"#), Err(UnescapeError));
+        assert_eq!(
+            unescape_double(r#"\u{999999999999999999}"#),
+            Err(UnescapeError)
+        );
     }
 }
