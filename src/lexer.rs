@@ -166,6 +166,7 @@ fn test_lex_float() {
     assert_eq!(lex.next(), None);
 }
 
+#[derive(Clone, Debug)]
 pub struct SpannedToken<'source> {
     pub token: Token,
     pub span: Span,

@@ -23,6 +23,7 @@ mod error;
 mod lexer;
 mod num;
 mod parser;
+mod serde;
 mod string;
 
 pub use error::{ParseError, SpannedError};

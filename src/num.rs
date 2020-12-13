@@ -8,6 +8,8 @@ pub enum ParseIntError {
     InvalidDigit,
     #[error("number too large or small to fit in target type")]
     Overflow,
+    #[error("unexpected negative number")]
+    UnexpectedNegative,
 }
 
 /// Mostly copied from std

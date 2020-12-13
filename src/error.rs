@@ -70,6 +70,12 @@ pub struct SourceSpannedError<'source, T> {
     source: &'source str,
 }
 
+impl<'source, T: Error + Debug + 'static> SourceSpannedError<'source, T> {
+    pub fn spanned(self) -> SpannedError<T> {
+        SpannedError::new(self.error, self.span)
+    }
+}
+
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
 impl<'source, T: Error + Debug> Display for SourceSpannedError<'source, T> {
@@ -122,6 +128,10 @@ pub enum ParseError {
     InvalidFloatLiteral(#[from] ParseFloatError),
     #[error("Invalid string literal")]
     InvalidStringLiteral,
+    #[error("Array key not valid for this position")]
+    UnexpectedArrayKey,
+    #[error("Trailing characters after parsing")]
+    TrailingCharacters,
 }
 
 impl From<UnescapeError> for ParseError {
@@ -187,6 +197,20 @@ impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
         })
         .with_span(usize::max_value()..usize::max_value())
         .and_then(|token| token.expect_token(expected))
+    }
+}
+
+impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>> {
+        self.ok_or_else(|| UnexpectedTokenError {
+            expected: expected.to_vec(),
+            found: None,
+        })
+        .with_span(usize::max_value()..usize::max_value())
+        .and_then(|token| token.clone().expect_token(expected))
     }
 }
 

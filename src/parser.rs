@@ -5,6 +5,7 @@ use crate::string::{is_array_key_numeric, parse_string};
 use crate::{Key, Value};
 use logos::Logos;
 use std::collections::HashMap;
+use std::iter::Peekable;
 use std::num::ParseFloatError;
 
 /// Parse a php literal
@@ -30,14 +31,22 @@ pub fn parse(source: &str) -> Result<Value, SpannedError<ParseError>> {
 }
 
 pub struct Parser<'source> {
-    tokens: TokenStream<'source>,
+    tokens: Peekable<TokenStream<'source>>,
 }
 
 impl<'source> Parser<'source> {
     pub fn new(source: &'source str) -> Self {
         Parser {
-            tokens: TokenStream::new(Token::lexer(source)),
+            tokens: TokenStream::new(Token::lexer(source)).peekable(),
         }
+    }
+
+    pub fn next_token(&mut self) -> Option<SpannedToken<'source>> {
+        self.tokens.next()
+    }
+
+    pub fn eat_token(&mut self) {
+        let _ = self.tokens.next();
     }
 
     pub fn run(&mut self) -> Result<Value, SpannedError<ParseError>> {
@@ -55,10 +64,10 @@ impl<'source> Parser<'source> {
 
     pub fn parse_any(&mut self, token: SpannedToken) -> Result<Value, SpannedError<ParseError>> {
         let value = match token.token {
-            Token::Bool => Value::Bool(self.parse_bool(token)?),
-            Token::Integer => Value::Int(self.parse_int(token)?),
-            Token::Float => Value::Float(self.parse_float(token)?),
-            Token::LiteralString => Value::String(self.parse_string(token)?),
+            Token::Bool => Value::Bool(self.parse_bool_token(token)?),
+            Token::Integer => Value::Int(self.parse_int_token(token)?),
+            Token::Float => Value::Float(self.parse_float_token(token)?),
+            Token::LiteralString => Value::String(self.parse_string_token(token)?),
             Token::Null => Value::Null,
             Token::Array => Value::Array(self.parse_array(ArraySyntax::Long)?),
             Token::SquareOpen => Value::Array(self.parse_array(ArraySyntax::Short)?),
@@ -68,7 +77,7 @@ impl<'source> Parser<'source> {
         Ok(value)
     }
 
-    pub fn parse_bool(&self, token: SpannedToken) -> Result<bool, SpannedError<ParseError>> {
+    pub fn parse_bool_token(&self, token: SpannedToken) -> Result<bool, SpannedError<ParseError>> {
         token
             .slice()
             .to_ascii_lowercase()
@@ -76,15 +85,18 @@ impl<'source> Parser<'source> {
             .with_span(token.span)
     }
 
-    pub fn parse_int(&self, token: SpannedToken) -> Result<i64, SpannedError<ParseError>> {
+    pub fn parse_int_token(&self, token: SpannedToken) -> Result<i64, SpannedError<ParseError>> {
         parse_int(token.slice()).with_span(token.span)
     }
 
-    pub fn parse_float(&self, token: SpannedToken) -> Result<f64, SpannedError<ParseError>> {
+    pub fn parse_float_token(&self, token: SpannedToken) -> Result<f64, SpannedError<ParseError>> {
         parse_float(token.slice()).with_span(token.span)
     }
 
-    pub fn parse_string(&self, token: SpannedToken) -> Result<String, SpannedError<ParseError>> {
+    pub fn parse_string_token(
+        &self,
+        token: SpannedToken,
+    ) -> Result<String, SpannedError<ParseError>> {
         parse_string(token.slice()).with_span(token.span)
     }
 
@@ -192,8 +204,8 @@ fn parse_float(literal: &str) -> Result<f64, ParseFloatError> {
 
 #[derive(Default)]
 struct ArrayBuilder {
-    next_int_key: i64,
     data: HashMap<Key, Value>,
+    next_int_key: i64,
 }
 
 impl ArrayBuilder {
@@ -211,14 +223,14 @@ impl ArrayBuilder {
     }
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq, Copy, Clone)]
 pub enum ArraySyntax {
     Short,
     Long,
 }
 
 impl ArraySyntax {
-    fn close_bracket(&self) -> Token {
+    pub fn close_bracket(&self) -> Token {
         match self {
             ArraySyntax::Long => Token::BracketClose,
             ArraySyntax::Short => Token::SquareClose,
