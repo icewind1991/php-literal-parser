@@ -53,6 +53,10 @@ impl<'source> Parser<'source> {
             Token::Array,
             Token::SquareOpen,
         ])?;
+        self.parse_token(token)
+    }
+
+    pub fn parse_token(&mut self, token: SpannedToken) -> Result<Value, SpannedError<ParseError>> {
         let value = match token.token {
             Token::Bool => Value::Bool(self.parse_bool(token)?),
             Token::Integer => Value::Int(self.parse_int(token)?),
@@ -67,7 +71,7 @@ impl<'source> Parser<'source> {
         Ok(value)
     }
 
-    fn parse_bool(&self, token: SpannedToken) -> Result<bool, SpannedError<ParseError>> {
+    pub fn parse_bool(&self, token: SpannedToken) -> Result<bool, SpannedError<ParseError>> {
         token
             .slice()
             .to_ascii_lowercase()
@@ -75,19 +79,19 @@ impl<'source> Parser<'source> {
             .with_span(token.span)
     }
 
-    fn parse_int(&self, token: SpannedToken) -> Result<i64, SpannedError<ParseError>> {
+    pub fn parse_int(&self, token: SpannedToken) -> Result<i64, SpannedError<ParseError>> {
         parse_int(token.slice()).with_span(token.span)
     }
 
-    fn parse_float(&self, token: SpannedToken) -> Result<f64, SpannedError<ParseError>> {
+    pub fn parse_float(&self, token: SpannedToken) -> Result<f64, SpannedError<ParseError>> {
         parse_float(token.slice()).with_span(token.span)
     }
 
-    fn parse_string(&self, token: SpannedToken) -> Result<String, SpannedError<ParseError>> {
+    pub fn parse_string(&self, token: SpannedToken) -> Result<String, SpannedError<ParseError>> {
         parse_string(token.slice()).with_span(token.span)
     }
 
-    fn parse_array(
+    pub fn parse_array(
         &mut self,
         syntax: ArraySyntax,
     ) -> Result<HashMap<Key, Value>, SpannedError<ParseError>> {
@@ -98,20 +102,21 @@ impl<'source> Parser<'source> {
         }
 
         loop {
-            let key_or_value = match self.parse_any() {
-                Ok(value) => value,
-                Err(err) => {
-                    // trailing comma or empty array
-                    match err.error() {
-                        ParseError::UnexpectedToken(UnexpectedTokenError {
-                            found: Some(token),
-                            ..
-                        }) if token == &syntax.close_bracket() => break,
-                        _ => return Err(err),
-                    }
-                }
-            };
-            let key_or_value_span = self.tokens.span();
+            let key_value_or_close_token = self.tokens.next().expect_token(&[
+                Token::Bool,
+                Token::Integer,
+                Token::Float,
+                Token::LiteralString,
+                Token::Null,
+                Token::Array,
+                Token::SquareOpen,
+                syntax.close_bracket(),
+            ])?;
+
+            // trailing comma or empty array
+            if key_value_or_close_token.token == syntax.close_bracket() {
+                break;
+            }
             let next = self.tokens.next().expect_token(&[
                 syntax.close_bracket(),
                 Token::Comma,
@@ -120,27 +125,32 @@ impl<'source> Parser<'source> {
 
             match next.token {
                 Token::BracketClose => {
-                    builder.push_value(key_or_value);
+                    builder.push_value(self.parse_token(key_value_or_close_token)?);
                     break;
                 }
                 Token::SquareClose => {
-                    builder.push_value(key_or_value);
+                    builder.push_value(self.parse_token(key_value_or_close_token)?);
                     break;
                 }
                 Token::Comma => {
-                    builder.push_value(key_or_value);
+                    builder.push_value(self.parse_token(key_value_or_close_token)?);
                 }
                 Token::Arrow => {
+                    let key_token = key_value_or_close_token.expect_token(&[
+                        Token::Bool,
+                        Token::Integer,
+                        Token::Float,
+                        Token::LiteralString,
+                        Token::Null,
+                    ])?;
                     let value = self.parse_any()?;
-                    let key = match key_or_value {
+                    let key = match self.parse_token(key_token)? {
                         Value::Int(int) => Key::Int(int),
                         Value::Float(float) => Key::Int(float as i64),
                         Value::String(str) => Key::String(str),
-                        value => {
-                            let err = ParseError::InvalidArrayKey(InvalidArrayKeyError(value));
-                            let span_err = SpannedError::new(err, key_or_value_span);
-                            return Err(span_err);
-                        }
+                        Value::Bool(bool) => Key::Int(if bool { 1 } else { 0 }),
+                        Value::Null => Key::String(String::from("")),
+                        _ => unreachable!(),
                     };
                     builder.push_key_value(key, value);
 
