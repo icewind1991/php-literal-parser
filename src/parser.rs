@@ -27,46 +27,146 @@ use std::num::ParseFloatError;
 /// ```
 ///
 pub fn parse(source: &str) -> Result<Value, SpannedError<ParseError>> {
-    let mut lexer: Lexer<Token> = Token::lexer(source);
-    parse_lexer(source, &mut lexer)
+    Parser::new(source).parse()
 }
 
-pub fn parse_lexer<'source>(
+pub struct Parser<'source> {
     source: &'source str,
-    lexer: &mut Lexer<Token>,
-) -> Result<Value, SpannedError<'source, ParseError>> {
-    let token = lexer
-        .next()
-        .expect_token(&[
-            Token::Bool,
-            Token::Integer,
-            Token::Float,
-            Token::LiteralString,
-            Token::Null,
-            Token::Array,
-            Token::SquareOpen,
-        ])
-        .with_span(lexer.span(), source)?;
-    let value = match token {
-        Token::Bool => Value::Bool(
-            lexer
-                .slice()
-                .to_ascii_lowercase()
-                .parse()
-                .with_span(lexer.span(), source)?,
-        ),
-        Token::Integer => Value::Int(parse_int(lexer.slice()).with_span(lexer.span(), source)?),
-        Token::Float => Value::Float(parse_float(lexer.slice()).with_span(lexer.span(), source)?),
-        Token::LiteralString => {
-            Value::String(parse_string(lexer.slice()).with_span(lexer.span(), source)?)
-        }
-        Token::Null => Value::Null,
-        Token::Array => Value::Array(parse_array(source, lexer, ArraySyntax::Long)?),
-        Token::SquareOpen => Value::Array(parse_array(source, lexer, ArraySyntax::Short)?),
-        _ => unreachable!(),
-    };
+    lexer: Lexer<'source, Token>,
+}
 
-    Ok(value)
+impl<'source> Parser<'source> {
+    pub fn new(source: &'source str) -> Self {
+        Parser {
+            source,
+            lexer: Token::lexer(source),
+        }
+    }
+
+    pub fn parse(&mut self) -> Result<Value, SpannedError<'source, ParseError>> {
+        let token = self
+            .lexer
+            .next()
+            .expect_token(&[
+                Token::Bool,
+                Token::Integer,
+                Token::Float,
+                Token::LiteralString,
+                Token::Null,
+                Token::Array,
+                Token::SquareOpen,
+            ])
+            .with_span(self.lexer.span(), self.source)?;
+        let value = match token {
+            Token::Bool => Value::Bool(
+                self.lexer
+                    .slice()
+                    .to_ascii_lowercase()
+                    .parse()
+                    .with_span(self.lexer.span(), self.source)?,
+            ),
+            Token::Integer => {
+                Value::Int(parse_int(self.lexer.slice()).with_span(self.lexer.span(), self.source)?)
+            }
+            Token::Float => Value::Float(
+                parse_float(self.lexer.slice()).with_span(self.lexer.span(), self.source)?,
+            ),
+            Token::LiteralString => Value::String(
+                parse_string(self.lexer.slice()).with_span(self.lexer.span(), self.source)?,
+            ),
+            Token::Null => Value::Null,
+            Token::Array => Value::Array(self.parse_array(ArraySyntax::Long)?),
+            Token::SquareOpen => Value::Array(self.parse_array(ArraySyntax::Short)?),
+            _ => unreachable!(),
+        };
+
+        Ok(value)
+    }
+
+    fn parse_array(
+        &mut self,
+        syntax: ArraySyntax,
+    ) -> Result<HashMap<Key, Value>, SpannedError<'source, ParseError>> {
+        let mut builder = ArrayBuilder::default();
+
+        if syntax == ArraySyntax::Long {
+            self.lexer
+                .next()
+                .expect_token(&[Token::BracketOpen])
+                .with_span(self.lexer.span(), self.source)?;
+        }
+
+        loop {
+            let key_or_value = match self.parse() {
+                Ok(value) => value,
+                Err(err) => {
+                    // trailing comma or empty array
+                    match err.error() {
+                        ParseError::UnexpectedToken(UnexpectedTokenError {
+                            found: Some(token),
+                            ..
+                        }) if token == &syntax.close_bracket() => break,
+                        _ => return Err(err),
+                    }
+                }
+            };
+            let key_or_value_span = self.lexer.span();
+            let next = self
+                .lexer
+                .next()
+                .expect_token(&[syntax.close_bracket(), Token::Comma, Token::Arrow])
+                .with_span(self.lexer.span(), self.source)?;
+
+            match next {
+                Token::BracketClose => {
+                    builder.push_value(key_or_value);
+                    break;
+                }
+                Token::SquareClose => {
+                    builder.push_value(key_or_value);
+                    break;
+                }
+                Token::Comma => {
+                    builder.push_value(key_or_value);
+                }
+                Token::Arrow => {
+                    let value = self.parse()?;
+                    let key = match key_or_value {
+                        Value::Int(int) => Key::Int(int),
+                        Value::Float(float) => Key::Int(float as i64),
+                        Value::String(str) => Key::String(str),
+                        value => {
+                            let err = ParseError::InvalidArrayKey(InvalidArrayKeyError(value));
+                            let span_err = SpannedError::new(err, key_or_value_span, self.source);
+                            return Err(span_err);
+                        }
+                    };
+                    builder.push_key_value(key, value);
+
+                    match self
+                        .lexer
+                        .next()
+                        .expect_token(&[syntax.close_bracket(), Token::Comma])
+                        .with_span(self.lexer.span(), self.source)?
+                    {
+                        Token::BracketClose => {
+                            break;
+                        }
+                        Token::SquareClose => {
+                            break;
+                        }
+                        Token::Comma => {}
+                        _ => unreachable!(),
+                    }
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
+
+        Ok(builder.data)
+    }
 }
 
 fn parse_float(literal: &str) -> Result<f64, ParseFloatError> {
@@ -108,90 +208,6 @@ impl ArraySyntax {
             ArraySyntax::Short => Token::SquareClose,
         }
     }
-}
-
-fn parse_array<'source>(
-    source: &'source str,
-    lexer: &mut Lexer<Token>,
-    syntax: ArraySyntax,
-) -> Result<HashMap<Key, Value>, SpannedError<'source, ParseError>> {
-    let mut builder = ArrayBuilder::default();
-
-    if syntax == ArraySyntax::Long {
-        lexer
-            .next()
-            .expect_token(&[Token::BracketOpen])
-            .with_span(lexer.span(), source)?;
-    }
-
-    loop {
-        let key_or_value = match parse_lexer(source, lexer) {
-            Ok(value) => value,
-            Err(err) => {
-                // trailing comma or empty array
-                match err.error() {
-                    ParseError::UnexpectedToken(UnexpectedTokenError {
-                        found: Some(token),
-                        ..
-                    }) if token == &syntax.close_bracket() => break,
-                    _ => return Err(err),
-                }
-            }
-        };
-        let key_or_value_span = lexer.span();
-        let next = lexer
-            .next()
-            .expect_token(&[syntax.close_bracket(), Token::Comma, Token::Arrow])
-            .with_span(lexer.span(), source)?;
-
-        match next {
-            Token::BracketClose => {
-                builder.push_value(key_or_value);
-                break;
-            }
-            Token::SquareClose => {
-                builder.push_value(key_or_value);
-                break;
-            }
-            Token::Comma => {
-                builder.push_value(key_or_value);
-            }
-            Token::Arrow => {
-                let value = parse_lexer(source, lexer)?;
-                let key = match key_or_value {
-                    Value::Int(int) => Key::Int(int),
-                    Value::Float(float) => Key::Int(float as i64),
-                    Value::String(str) => Key::String(str),
-                    value => {
-                        let err = ParseError::InvalidArrayKey(InvalidArrayKeyError(value));
-                        let span_err = SpannedError::new(err, key_or_value_span, source);
-                        return Err(span_err);
-                    }
-                };
-                builder.push_key_value(key, value);
-
-                match lexer
-                    .next()
-                    .expect_token(&[syntax.close_bracket(), Token::Comma])
-                    .with_span(lexer.span(), source)?
-                {
-                    Token::BracketClose => {
-                        break;
-                    }
-                    Token::SquareClose => {
-                        break;
-                    }
-                    Token::Comma => {}
-                    _ => unreachable!(),
-                }
-            }
-            _ => {
-                unreachable!();
-            }
-        }
-    }
-
-    Ok(builder.data)
 }
 
 #[test]
