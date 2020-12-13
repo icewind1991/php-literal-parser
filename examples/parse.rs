@@ -19,6 +19,6 @@ fn main() {
 
     match parse(source) {
         Ok(result) => print!("{:#?}", result),
-        Err(err) => eprint!("{}", err),
+        Err(err) => eprint!("{}", err.with_source(source)),
     }
 }

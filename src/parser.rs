@@ -30,14 +30,12 @@ pub fn parse(source: &str) -> Result<Value, SpannedError<ParseError>> {
 }
 
 pub struct Parser<'source> {
-    source: &'source str,
     tokens: TokenStream<'source>,
 }
 
 impl<'source> Parser<'source> {
     pub fn new(source: &'source str) -> Self {
         Parser {
-            source,
             tokens: TokenStream::new(Token::lexer(source)),
         }
     }

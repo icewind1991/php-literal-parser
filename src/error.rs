@@ -14,7 +14,7 @@ use thiserror::Error;
 
 /// An error and related source span
 ///
-/// You can pretty-print the error with the offending source by using `display_with_source`
+/// You can pretty-print the error with the offending source by using `with_source`
 ///
 /// ## Example
 ///
@@ -42,6 +42,14 @@ impl<T: Error + Debug> SpannedError<T> {
     pub fn error(&self) -> &T {
         &self.error
     }
+
+    pub fn with_source(self, source: &str) -> SourceSpannedError<T> {
+        SourceSpannedError {
+            span: self.span,
+            error: self.error,
+            source,
+        }
+    }
 }
 
 impl<T: Error + Debug + 'static> Error for SpannedError<T> {
@@ -56,17 +64,23 @@ impl<T: Error + Debug> Display for SpannedError<T> {
     }
 }
 
+pub struct SourceSpannedError<'source, T> {
+    span: Span,
+    error: T,
+    source: &'source str,
+}
+
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
-impl<T: Error + Debug> SpannedError<T> {
-    pub fn display_with_source(&self, source: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let start = get_position(source, self.span.start);
-        let end = get_position(source, self.span.end);
+impl<'source, T: Error + Debug> Display for SourceSpannedError<'source, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let start = get_position(self.source, self.span.start);
+        let end = get_position(self.source, self.span.end);
         let span = SourceSpan::new(start, end, end.next_line());
 
         let mut fmt = Formatter::with_margin_color(Color::Blue);
         let buffer = SourceBuffer::new(
-            source.chars().map(|char| Result::<char, ()>::Ok(char)),
+            self.source.chars().map(|char| Result::<char, ()>::Ok(char)),
             Position::default(),
             METRICS,
         );

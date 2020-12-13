@@ -186,14 +186,6 @@ impl<'source> TokenStream<'source> {
     pub fn new(lexer: Lexer<'source, Token>) -> Self {
         TokenStream { lexer }
     }
-
-    pub fn source(&self) -> &'source str {
-        self.lexer.source()
-    }
-
-    pub fn span(&self) -> Span {
-        self.lexer.span()
-    }
 }
 
 impl<'source> Iterator for TokenStream<'source> {
