@@ -43,7 +43,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    pub fn parse(&mut self) -> Result<Value, SpannedError<'source, ParseError>> {
+    pub fn parse(&mut self) -> Result<Value, SpannedError<ParseError>> {
         let token = self
             .lexer
             .next()
@@ -56,24 +56,24 @@ impl<'source> Parser<'source> {
                 Token::Array,
                 Token::SquareOpen,
             ])
-            .with_span(self.lexer.span(), self.source)?;
+            .with_span(self.lexer.span())?;
         let value = match token {
             Token::Bool => Value::Bool(
                 self.lexer
                     .slice()
                     .to_ascii_lowercase()
                     .parse()
-                    .with_span(self.lexer.span(), self.source)?,
+                    .with_span(self.lexer.span())?,
             ),
             Token::Integer => {
-                Value::Int(parse_int(self.lexer.slice()).with_span(self.lexer.span(), self.source)?)
+                Value::Int(parse_int(self.lexer.slice()).with_span(self.lexer.span())?)
             }
-            Token::Float => Value::Float(
-                parse_float(self.lexer.slice()).with_span(self.lexer.span(), self.source)?,
-            ),
-            Token::LiteralString => Value::String(
-                parse_string(self.lexer.slice()).with_span(self.lexer.span(), self.source)?,
-            ),
+            Token::Float => {
+                Value::Float(parse_float(self.lexer.slice()).with_span(self.lexer.span())?)
+            }
+            Token::LiteralString => {
+                Value::String(parse_string(self.lexer.slice()).with_span(self.lexer.span())?)
+            }
             Token::Null => Value::Null,
             Token::Array => Value::Array(self.parse_array(ArraySyntax::Long)?),
             Token::SquareOpen => Value::Array(self.parse_array(ArraySyntax::Short)?),
@@ -86,14 +86,14 @@ impl<'source> Parser<'source> {
     fn parse_array(
         &mut self,
         syntax: ArraySyntax,
-    ) -> Result<HashMap<Key, Value>, SpannedError<'source, ParseError>> {
+    ) -> Result<HashMap<Key, Value>, SpannedError<ParseError>> {
         let mut builder = ArrayBuilder::default();
 
         if syntax == ArraySyntax::Long {
             self.lexer
                 .next()
                 .expect_token(&[Token::BracketOpen])
-                .with_span(self.lexer.span(), self.source)?;
+                .with_span(self.lexer.span())?;
         }
 
         loop {
@@ -115,7 +115,7 @@ impl<'source> Parser<'source> {
                 .lexer
                 .next()
                 .expect_token(&[syntax.close_bracket(), Token::Comma, Token::Arrow])
-                .with_span(self.lexer.span(), self.source)?;
+                .with_span(self.lexer.span())?;
 
             match next {
                 Token::BracketClose => {
@@ -137,7 +137,7 @@ impl<'source> Parser<'source> {
                         Value::String(str) => Key::String(str),
                         value => {
                             let err = ParseError::InvalidArrayKey(InvalidArrayKeyError(value));
-                            let span_err = SpannedError::new(err, key_or_value_span, self.source);
+                            let span_err = SpannedError::new(err, key_or_value_span);
                             return Err(span_err);
                         }
                     };
@@ -147,7 +147,7 @@ impl<'source> Parser<'source> {
                         .lexer
                         .next()
                         .expect_token(&[syntax.close_bracket(), Token::Comma])
-                        .with_span(self.lexer.span(), self.source)?
+                        .with_span(self.lexer.span())?
                     {
                         Token::BracketClose => {
                             break;

@@ -13,7 +13,9 @@ use std::num::ParseFloatError;
 use std::str::ParseBoolError;
 use thiserror::Error;
 
-/// An error and related source span, will print out the problematic code fragment and error on `Display`
+/// An error and related source span
+///
+/// You can pretty-print the error with the offending source by using `display_with_source`
 ///
 /// ## Example
 ///
@@ -28,19 +30,14 @@ use thiserror::Error;
 /// ```
 ///
 #[derive(Debug)]
-pub struct SpannedError<'a, T: Error + Debug> {
+pub struct SpannedError<T: Error + Debug> {
     span: Span,
-    source: &'a str,
     error: T,
 }
 
-impl<'a, T: Error + Debug> SpannedError<'a, T> {
-    pub fn new(error: T, span: Span, source: &'a str) -> Self {
-        SpannedError {
-            span,
-            source,
-            error,
-        }
+impl<T: Error + Debug> SpannedError<T> {
+    pub fn new(error: T, span: Span) -> Self {
+        SpannedError { span, error }
     }
 
     pub fn error(&self) -> &T {
@@ -48,23 +45,29 @@ impl<'a, T: Error + Debug> SpannedError<'a, T> {
     }
 }
 
-impl<'a, T: Error + Debug + 'static> Error for SpannedError<'a, T> {
+impl<T: Error + Debug + 'static> Error for SpannedError<T> {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(&self.error)
     }
 }
 
+impl<T: Error + Debug> Display for SpannedError<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        <T as Display>::fmt(&self.error, f)
+    }
+}
+
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
-impl<'a, T: Error + Debug> fmt::Display for SpannedError<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let start = get_position(self.source, self.span.start);
-        let end = get_position(self.source, self.span.end);
+impl<T: Error + Debug> SpannedError<T> {
+    pub fn display_with_source(&self, source: &str, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let start = get_position(source, self.span.start);
+        let end = get_position(source, self.span.end);
         let span = SourceSpan::new(start, end, end.next_line());
 
         let mut fmt = Formatter::with_margin_color(Color::Blue);
         let buffer = SourceBuffer::new(
-            self.source.chars().map(|char| Result::<char, ()>::Ok(char)),
+            source.chars().map(|char| Result::<char, ()>::Ok(char)),
             Position::default(),
             METRICS,
         );
@@ -186,15 +189,14 @@ impl ExpectToken for Token {
     }
 }
 
-pub trait ResultExt<'a, T, E: Error + Debug> {
-    fn with_span(self, span: Span, source: &'a str) -> Result<T, SpannedError<'a, E>>;
+pub trait ResultExt<T, E: Error + Debug> {
+    fn with_span(self, span: Span) -> Result<T, SpannedError<E>>;
 }
 
-impl<'a, T, E: Into<ParseError>> ResultExt<'a, T, ParseError> for Result<T, E> {
-    fn with_span(self, span: Span, source: &'a str) -> Result<T, SpannedError<'a, ParseError>> {
+impl<T, E: Into<ParseError>> ResultExt<T, ParseError> for Result<T, E> {
+    fn with_span(self, span: Span) -> Result<T, SpannedError<ParseError>> {
         self.map_err(|error| SpannedError {
             span,
-            source,
             error: error.into(),
         })
     }

@@ -1,4 +1,4 @@
-use logos::Logos;
+use logos::{Lexer, Logos, Span};
 
 #[derive(Logos, Debug, PartialEq, Clone)]
 pub enum Token {
@@ -164,4 +164,39 @@ fn test_lex_float() {
 
     assert_eq!(lex.next(), Some(Token::Float));
     assert_eq!(lex.next(), None);
+}
+
+pub struct SpannedToken<'source> {
+    pub token: Token,
+    pub span: Span,
+    pub source: &'source str,
+}
+
+impl<'source> SpannedToken<'source> {
+    pub fn slice(&self) -> &'source str {
+        &self.source[self.span.clone()]
+    }
+}
+
+pub struct TokenStream<'source> {
+    lexer: Lexer<'source, Token>,
+}
+
+impl<'source> TokenStream<'source> {
+    pub fn source(&self) -> &'source str {
+        self.lexer.source()
+    }
+}
+
+impl<'source> Iterator for TokenStream<'source> {
+    type Item = SpannedToken<'source>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let token = self.lexer.next()?;
+        Some(SpannedToken {
+            token,
+            span: self.lexer.span(),
+            source: self.lexer.source(),
+        })
+    }
 }
