@@ -1,4 +1,4 @@
-use crate::lexer::Token;
+use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::string::UnescapeError;
 use crate::Value;
@@ -162,29 +162,40 @@ impl Error for UnexpectedTokenError {}
 #[error("Invalid array key {0:?} expected number or string")]
 pub struct InvalidArrayKeyError(pub Value);
 
-pub trait ExpectToken {
-    fn expect_token(self, expected: &[Token]) -> Result<Token, UnexpectedTokenError>;
+pub trait ExpectToken<'source> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>>;
 }
 
-impl ExpectToken for Option<Token> {
-    fn expect_token(self, expected: &[Token]) -> Result<Token, UnexpectedTokenError> {
+impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>> {
         self.ok_or_else(|| UnexpectedTokenError {
             expected: expected.to_vec(),
             found: None,
         })
+        .with_span(usize::max_value()..usize::max_value())
         .and_then(|token| token.expect_token(expected))
     }
 }
 
-impl ExpectToken for Token {
-    fn expect_token(self, expected: &[Token]) -> Result<Token, UnexpectedTokenError> {
-        if expected.iter().any(|expect| self.eq(expect)) {
+impl<'source> ExpectToken<'source> for SpannedToken<'source> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>> {
+        if expected.iter().any(|expect| self.token.eq(expect)) {
             Ok(self)
         } else {
             Err(UnexpectedTokenError {
                 expected: expected.to_vec(),
-                found: Some(self),
+                found: Some(self.token),
             })
+            .with_span(self.span)
         }
     }
 }

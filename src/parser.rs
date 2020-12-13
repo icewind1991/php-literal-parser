@@ -1,6 +1,6 @@
 use crate::error::UnexpectedTokenError;
 use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
-use crate::lexer::Token;
+use crate::lexer::{SpannedToken, Token, TokenStream};
 use crate::num::parse_int;
 use crate::string::parse_string;
 use crate::{Key, Value};
@@ -27,53 +27,37 @@ use std::num::ParseFloatError;
 /// ```
 ///
 pub fn parse(source: &str) -> Result<Value, SpannedError<ParseError>> {
-    Parser::new(source).parse()
+    Parser::new(source).parse_any()
 }
 
 pub struct Parser<'source> {
     source: &'source str,
-    lexer: Lexer<'source, Token>,
+    tokens: TokenStream<'source>,
 }
 
 impl<'source> Parser<'source> {
     pub fn new(source: &'source str) -> Self {
         Parser {
             source,
-            lexer: Token::lexer(source),
+            tokens: TokenStream::new(Token::lexer(source)),
         }
     }
 
-    pub fn parse(&mut self) -> Result<Value, SpannedError<ParseError>> {
-        let token = self
-            .lexer
-            .next()
-            .expect_token(&[
-                Token::Bool,
-                Token::Integer,
-                Token::Float,
-                Token::LiteralString,
-                Token::Null,
-                Token::Array,
-                Token::SquareOpen,
-            ])
-            .with_span(self.lexer.span())?;
-        let value = match token {
-            Token::Bool => Value::Bool(
-                self.lexer
-                    .slice()
-                    .to_ascii_lowercase()
-                    .parse()
-                    .with_span(self.lexer.span())?,
-            ),
-            Token::Integer => {
-                Value::Int(parse_int(self.lexer.slice()).with_span(self.lexer.span())?)
-            }
-            Token::Float => {
-                Value::Float(parse_float(self.lexer.slice()).with_span(self.lexer.span())?)
-            }
-            Token::LiteralString => {
-                Value::String(parse_string(self.lexer.slice()).with_span(self.lexer.span())?)
-            }
+    pub fn parse_any(&mut self) -> Result<Value, SpannedError<ParseError>> {
+        let token = self.tokens.next().expect_token(&[
+            Token::Bool,
+            Token::Integer,
+            Token::Float,
+            Token::LiteralString,
+            Token::Null,
+            Token::Array,
+            Token::SquareOpen,
+        ])?;
+        let value = match token.token {
+            Token::Bool => Value::Bool(self.parse_bool(token)?),
+            Token::Integer => Value::Int(self.parse_int(token)?),
+            Token::Float => Value::Float(self.parse_float(token)?),
+            Token::LiteralString => Value::String(self.parse_string(token)?),
             Token::Null => Value::Null,
             Token::Array => Value::Array(self.parse_array(ArraySyntax::Long)?),
             Token::SquareOpen => Value::Array(self.parse_array(ArraySyntax::Short)?),
@@ -83,6 +67,26 @@ impl<'source> Parser<'source> {
         Ok(value)
     }
 
+    fn parse_bool(&self, token: SpannedToken) -> Result<bool, SpannedError<ParseError>> {
+        token
+            .slice()
+            .to_ascii_lowercase()
+            .parse()
+            .with_span(token.span)
+    }
+
+    fn parse_int(&self, token: SpannedToken) -> Result<i64, SpannedError<ParseError>> {
+        parse_int(token.slice()).with_span(token.span)
+    }
+
+    fn parse_float(&self, token: SpannedToken) -> Result<f64, SpannedError<ParseError>> {
+        parse_float(token.slice()).with_span(token.span)
+    }
+
+    fn parse_string(&self, token: SpannedToken) -> Result<String, SpannedError<ParseError>> {
+        parse_string(token.slice()).with_span(token.span)
+    }
+
     fn parse_array(
         &mut self,
         syntax: ArraySyntax,
@@ -90,14 +94,11 @@ impl<'source> Parser<'source> {
         let mut builder = ArrayBuilder::default();
 
         if syntax == ArraySyntax::Long {
-            self.lexer
-                .next()
-                .expect_token(&[Token::BracketOpen])
-                .with_span(self.lexer.span())?;
+            self.tokens.next().expect_token(&[Token::BracketOpen])?;
         }
 
         loop {
-            let key_or_value = match self.parse() {
+            let key_or_value = match self.parse_any() {
                 Ok(value) => value,
                 Err(err) => {
                     // trailing comma or empty array
@@ -110,14 +111,14 @@ impl<'source> Parser<'source> {
                     }
                 }
             };
-            let key_or_value_span = self.lexer.span();
-            let next = self
-                .lexer
-                .next()
-                .expect_token(&[syntax.close_bracket(), Token::Comma, Token::Arrow])
-                .with_span(self.lexer.span())?;
+            let key_or_value_span = self.tokens.span();
+            let next = self.tokens.next().expect_token(&[
+                syntax.close_bracket(),
+                Token::Comma,
+                Token::Arrow,
+            ])?;
 
-            match next {
+            match next.token {
                 Token::BracketClose => {
                     builder.push_value(key_or_value);
                     break;
@@ -130,7 +131,7 @@ impl<'source> Parser<'source> {
                     builder.push_value(key_or_value);
                 }
                 Token::Arrow => {
-                    let value = self.parse()?;
+                    let value = self.parse_any()?;
                     let key = match key_or_value {
                         Value::Int(int) => Key::Int(int),
                         Value::Float(float) => Key::Int(float as i64),
@@ -144,10 +145,10 @@ impl<'source> Parser<'source> {
                     builder.push_key_value(key, value);
 
                     match self
-                        .lexer
+                        .tokens
                         .next()
-                        .expect_token(&[syntax.close_bracket(), Token::Comma])
-                        .with_span(self.lexer.span())?
+                        .expect_token(&[syntax.close_bracket(), Token::Comma])?
+                        .token
                     {
                         Token::BracketClose => {
                             break;
