@@ -198,9 +198,29 @@ impl<'a> PeekableBytes<'a> {
     }
 }
 
+pub fn is_array_key_numeric(string: &str) -> bool {
+    let mut bytes = string.bytes();
+    if !matches!((bytes.next(), string.len()), (Some(b'-'), _) | (Some(b'0'..=b'9'), 1) | (Some(b'1'..=b'9'), _))
+    {
+        return false;
+    }
+
+    bytes.all(|byte| matches!(byte, b'0'..=b'9'))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_is_numeric() {
+        assert_eq!(true, is_array_key_numeric("123"));
+        assert_eq!(true, is_array_key_numeric("-123"));
+        assert_eq!(true, is_array_key_numeric("0"));
+        assert_eq!(false, is_array_key_numeric("0123"));
+        assert_eq!(false, is_array_key_numeric("123asd"));
+        assert_eq!(false, is_array_key_numeric("+123"));
+    }
 
     #[test]
     fn test_unescape_single() {

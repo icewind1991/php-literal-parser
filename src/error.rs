@@ -1,7 +1,6 @@
 use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::string::UnescapeError;
-use crate::Value;
 use logos::Span;
 use source_span::{
     fmt::{Color, Formatter, Style},
@@ -101,8 +100,6 @@ fn get_position(text: &str, index: usize) -> Position {
 pub enum ParseError {
     #[error("{0}")]
     UnexpectedToken(#[from] UnexpectedTokenError),
-    #[error("{0}")]
-    InvalidArrayKey(#[from] InvalidArrayKeyError),
     #[error("Invalid boolean literal: {0}")]
     InvalidBoolLiteral(#[from] ParseBoolError),
     #[error("Invalid integer literal: {0}")]
@@ -157,10 +154,6 @@ impl Display for UnexpectedTokenError {
 }
 
 impl Error for UnexpectedTokenError {}
-
-#[derive(Error, Debug)]
-#[error("Invalid array key {0:?} expected number or string")]
-pub struct InvalidArrayKeyError(pub Value);
 
 pub trait ExpectToken<'source> {
     fn expect_token(

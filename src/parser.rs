@@ -1,10 +1,9 @@
-use crate::error::UnexpectedTokenError;
-use crate::error::{ExpectToken, InvalidArrayKeyError, ParseError, ResultExt, SpannedError};
+use crate::error::{ExpectToken, ParseError, ResultExt, SpannedError};
 use crate::lexer::{SpannedToken, Token, TokenStream};
 use crate::num::parse_int;
-use crate::string::parse_string;
+use crate::string::{is_array_key_numeric, parse_string};
 use crate::{Key, Value};
-use logos::{Lexer, Logos};
+use logos::Logos;
 use std::collections::HashMap;
 use std::num::ParseFloatError;
 
@@ -27,7 +26,7 @@ use std::num::ParseFloatError;
 /// ```
 ///
 pub fn parse(source: &str) -> Result<Value, SpannedError<ParseError>> {
-    Parser::new(source).parse_any()
+    Parser::new(source).run()
 }
 
 pub struct Parser<'source> {
@@ -43,7 +42,7 @@ impl<'source> Parser<'source> {
         }
     }
 
-    pub fn parse_any(&mut self) -> Result<Value, SpannedError<ParseError>> {
+    pub fn run(&mut self) -> Result<Value, SpannedError<ParseError>> {
         let token = self.tokens.next().expect_token(&[
             Token::Bool,
             Token::Integer,
@@ -53,10 +52,10 @@ impl<'source> Parser<'source> {
             Token::Array,
             Token::SquareOpen,
         ])?;
-        self.parse_token(token)
+        self.parse_any(token)
     }
 
-    pub fn parse_token(&mut self, token: SpannedToken) -> Result<Value, SpannedError<ParseError>> {
+    pub fn parse_any(&mut self, token: SpannedToken) -> Result<Value, SpannedError<ParseError>> {
         let value = match token.token {
             Token::Bool => Value::Bool(self.parse_bool(token)?),
             Token::Integer => Value::Int(self.parse_int(token)?),
@@ -125,33 +124,19 @@ impl<'source> Parser<'source> {
 
             match next.token {
                 Token::BracketClose => {
-                    builder.push_value(self.parse_token(key_value_or_close_token)?);
+                    builder.push_value(self.parse_any(key_value_or_close_token)?);
                     break;
                 }
                 Token::SquareClose => {
-                    builder.push_value(self.parse_token(key_value_or_close_token)?);
+                    builder.push_value(self.parse_any(key_value_or_close_token)?);
                     break;
                 }
                 Token::Comma => {
-                    builder.push_value(self.parse_token(key_value_or_close_token)?);
+                    builder.push_value(self.parse_any(key_value_or_close_token)?);
                 }
                 Token::Arrow => {
-                    let key_token = key_value_or_close_token.expect_token(&[
-                        Token::Bool,
-                        Token::Integer,
-                        Token::Float,
-                        Token::LiteralString,
-                        Token::Null,
-                    ])?;
-                    let value = self.parse_any()?;
-                    let key = match self.parse_token(key_token)? {
-                        Value::Int(int) => Key::Int(int),
-                        Value::Float(float) => Key::Int(float as i64),
-                        Value::String(str) => Key::String(str),
-                        Value::Bool(bool) => Key::Int(if bool { 1 } else { 0 }),
-                        Value::Null => Key::String(String::from("")),
-                        _ => unreachable!(),
-                    };
+                    let key = self.parse_array_key(key_value_or_close_token)?;
+                    let value = self.run()?;
                     builder.push_key_value(key, value);
 
                     match self
@@ -177,6 +162,28 @@ impl<'source> Parser<'source> {
         }
 
         Ok(builder.data)
+    }
+
+    pub fn parse_array_key(
+        &mut self,
+        token: SpannedToken,
+    ) -> Result<Key, SpannedError<ParseError>> {
+        let token = token.expect_token(&[
+            Token::Bool,
+            Token::Integer,
+            Token::Float,
+            Token::LiteralString,
+            Token::Null,
+        ])?;
+        Ok(match self.parse_any(token)? {
+            Value::Int(int) => Key::Int(int),
+            Value::Float(float) => Key::Int(float as i64),
+            Value::String(str) if is_array_key_numeric(&str) => Key::Int(parse_int(&str).unwrap()),
+            Value::String(str) => Key::String(str),
+            Value::Bool(bool) => Key::Int(if bool { 1 } else { 0 }),
+            Value::Null => Key::String(String::from("")),
+            _ => unreachable!(),
+        })
     }
 }
 
@@ -207,7 +214,7 @@ impl ArrayBuilder {
 }
 
 #[derive(Eq, PartialEq)]
-enum ArraySyntax {
+pub enum ArraySyntax {
     Short,
     Long,
 }
@@ -306,4 +313,15 @@ fn test_parse() {
     assert_eq!(Value::Float(1000.0), parse(r#"10e2"#).unwrap());
     assert_eq!(Value::Float(1.0), parse(r#"10e-1"#).unwrap());
     assert_eq!(Value::Float(1234.5), parse(r#"12_34.5"#).unwrap());
+
+    assert_eq!(
+        Value::Array(hashmap! {
+            Key::Int(2) => Value::Int(3),
+            Key::String("foo".into()) => Value::Int(4),
+            Key::String("".into()) => Value::Int(5),
+            Key::Int(1) => Value::Int(6),
+            Key::Int(0) => Value::Int(7),
+        }),
+        parse(r#"array("2"=>3,"foo" => 4, null => 5, true => 6, false => 7)"#).unwrap()
+    );
 }
