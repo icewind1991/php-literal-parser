@@ -18,6 +18,7 @@
 //! # }
 //! ```
 //!
+#![forbid(unsafe_code)]
 mod error;
 mod lexer;
 mod num;

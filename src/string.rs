@@ -40,11 +40,8 @@ impl UnescapeState {
         self.out.extend_from_slice(slice);
     }
 
-    fn finalize(self) -> String {
-        // this is safe because we only push bytes into the buffer that either
-        //   - come from the source &str, and are delimited a \
-        //   - are validated unicode points, utf8 encoded
-        unsafe { String::from_utf8_unchecked(self.out) }
+    fn finalize(self) -> UnescapeResult<String> {
+        String::from_utf8(self.out).map_err(|_| UnescapeError)
     }
 }
 
@@ -169,7 +166,7 @@ fn unescape<S: EscapedString>(s: &str) -> UnescapeResult<String> {
 
     state.push_slice(&bytes[0..]);
 
-    Ok(state.finalize())
+    state.finalize()
 }
 
 struct PeekableBytes<'a> {
