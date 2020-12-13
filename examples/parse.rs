@@ -1,4 +1,4 @@
-use php_literal_parser::parse;
+use php_literal_parser::{from_str, Value};
 
 fn main() {
     let source = r###"
@@ -17,7 +17,7 @@ fn main() {
     )
     "###;
 
-    match parse(source) {
+    match from_str::<Value>(source) {
         Ok(result) => print!("{:#?}", result),
         Err(err) => eprint!("{}", err.with_source(source)),
     }

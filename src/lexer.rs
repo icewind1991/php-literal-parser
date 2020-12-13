@@ -1,6 +1,8 @@
 use logos::{Lexer, Logos, Span};
+use serde::export::fmt::Debug;
+use serde::export::Formatter;
 
-#[derive(Logos, Debug, PartialEq, Clone)]
+#[derive(Logos, Debug, PartialEq, Clone, Copy)]
 pub enum Token {
     #[token("array")]
     Array,
@@ -166,7 +168,7 @@ fn test_lex_float() {
     assert_eq!(lex.next(), None);
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SpannedToken<'source> {
     pub token: Token,
     pub span: Span,
@@ -176,6 +178,17 @@ pub struct SpannedToken<'source> {
 impl<'source> SpannedToken<'source> {
     pub fn slice(&self) -> &'source str {
         &self.source[self.span.clone()]
+    }
+}
+
+impl<'source> Debug for SpannedToken<'source> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "SpannedToken {{ {:?}: \"{}\"}} ",
+            self.token,
+            self.slice()
+        )
     }
 }
 

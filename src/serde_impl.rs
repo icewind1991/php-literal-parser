@@ -8,75 +8,44 @@ use crate::error::{ExpectToken, ResultExt};
 use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::parser::{ArraySyntax, Parser};
-use crate::{Key, ParseError, SpannedError};
+use crate::{Key, ParseError, RawParseError};
 use serde::export::TryFrom;
-use std::error::Error;
-use std::fmt::{Display, Formatter};
+use std::collections::VecDeque;
 
-#[derive(Debug)]
-pub enum SerdeParseError {
-    Parse(ParseError),
-    Spanned(SpannedError<ParseError>),
-    Custom(String),
-}
-
-impl From<SpannedError<ParseError>> for SerdeParseError {
-    fn from(err: SpannedError<ParseError>) -> Self {
-        SerdeParseError::Spanned(err)
-    }
-}
-
-impl From<ParseError> for SerdeParseError {
-    fn from(err: ParseError) -> Self {
-        SerdeParseError::Parse(err)
-    }
-}
-
-impl Display for SerdeParseError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            SerdeParseError::Spanned(err) => write!(f, "{}", err),
-            SerdeParseError::Parse(err) => write!(f, "{}", err),
-            SerdeParseError::Custom(err) => write!(f, "{}", err),
-        }
-    }
-}
-
-impl Error for SerdeParseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            SerdeParseError::Spanned(err) => Some(err),
-            SerdeParseError::Parse(err) => Some(err),
-            SerdeParseError::Custom(_) => None,
-        }
-    }
-}
-
-impl serde::de::Error for SerdeParseError {
-    fn custom<T>(msg: T) -> Self
-    where
-        T: Display,
-    {
-        SerdeParseError::Custom(msg.to_string())
-    }
-}
-
-type Result<T> = std::result::Result<T, SerdeParseError>;
+type Result<T> = std::result::Result<T, ParseError>;
 
 pub struct Deserializer<'de> {
     parser: Parser<'de>,
-    peeked: Option<SpannedToken<'de>>,
+    peeked: VecDeque<SpannedToken<'de>>,
 }
 
 impl<'de> Deserializer<'de> {
     pub fn from_str(input: &'de str) -> Self {
         Deserializer {
             parser: Parser::new(input),
-            peeked: None,
+            peeked: Default::default(),
         }
     }
 }
 
+/// Parse a php literal
+///
+/// ## Example
+///
+/// ```rust
+/// use php_literal_parser::{from_str, Value, Key};
+/// # use std::fmt::Debug;
+/// # use std::error::Error;
+///
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// let map = from_str::<Value>(r#"["foo" => true, "nested" => ['foo' => false]]"#)?;
+///
+/// assert_eq!(map["foo"], true);
+/// assert_eq!(map["nested"]["foo"], false);
+/// # Ok(())
+/// # }
+/// ```
+///
 pub fn from_str<'a, T>(s: &'a str) -> Result<T>
 where
     T: Deserialize<'a>,
@@ -86,26 +55,25 @@ where
     if deserializer.next_token().is_none() {
         Ok(t)
     } else {
-        Err(ParseError::TrailingCharacters.into())
+        Err(RawParseError::TrailingCharacters.into())
     }
 }
 
 impl<'de> Deserializer<'de> {
     fn next_token(&mut self) -> Option<SpannedToken<'de>> {
-        self.peeked.take().or_else(|| self.parser.next_token())
+        self.peeked.pop_front().or_else(|| self.parser.next_token())
     }
 
     fn peek_token(&mut self) -> Option<&SpannedToken<'de>> {
-        if self.peeked.is_none() {
-            self.peeked = self.next_token()
+        if self.peeked.is_empty() {
+            let next = self.next_token()?;
+            self.peeked.push_back(next)
         }
-        self.peeked.as_ref()
+        self.peeked.front()
     }
 
     fn eat_token(&mut self) {
-        if self.peeked.take().is_none() {
-            self.parser.eat_token()
-        }
+        let _ = self.next_token();
     }
 
     fn parse_bool(&mut self) -> Result<bool> {
@@ -113,8 +81,8 @@ impl<'de> Deserializer<'de> {
         Ok(self.parser.parse_bool_token(token)?)
     }
 
-    fn set_peeked(&mut self, peeked: SpannedToken<'de>) {
-        self.peeked = Some(peeked)
+    fn push_peeked(&mut self, peeked: SpannedToken<'de>) {
+        self.peeked.push_back(peeked)
     }
 
     fn parse_unsigned<T>(&mut self) -> Result<T>
@@ -125,14 +93,17 @@ impl<'de> Deserializer<'de> {
         let span = token.span.clone();
         let int = self.parser.parse_int_token(token)?;
         if int < 0 {
-            Err(SpannedError::new(
-                ParseError::InvalidIntLiteral(ParseIntError::UnexpectedNegative),
+            Err(ParseError::new(
+                RawParseError::InvalidIntLiteral(ParseIntError::UnexpectedNegative),
                 span,
             )
             .into())
         } else {
             Ok(T::try_from(int).map_err(|_| {
-                SpannedError::new(ParseError::InvalidIntLiteral(ParseIntError::Overflow), span)
+                ParseError::new(
+                    RawParseError::InvalidIntLiteral(ParseIntError::Overflow),
+                    span,
+                )
             })?)
         }
     }
@@ -145,7 +116,10 @@ impl<'de> Deserializer<'de> {
         let span = token.span.clone();
         Ok(
             T::try_from(self.parser.parse_int_token(token)?).map_err(|_| {
-                SpannedError::new(ParseError::InvalidIntLiteral(ParseIntError::Overflow), span)
+                ParseError::new(
+                    RawParseError::InvalidIntLiteral(ParseIntError::Overflow),
+                    span,
+                )
             })?,
         )
     }
@@ -162,7 +136,7 @@ impl<'de> Deserializer<'de> {
 }
 
 impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
-    type Error = SerdeParseError;
+    type Error = ParseError;
 
     fn deserialize_any<V>(self, visitor: V) -> Result<V::Value>
     where
@@ -183,7 +157,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             Token::LiteralString => self.deserialize_string(visitor),
             Token::Integer => self.deserialize_i64(visitor),
             Token::Float => self.deserialize_f64(visitor),
-            Token::Array | Token::SquareOpen => self.deserialize_seq(visitor),
+            Token::Array | Token::SquareOpen => self.deserialize_map(visitor),
             _ => unreachable!(),
         }
     }
@@ -370,7 +344,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             .next_token()
             .expect_token(&[Token::Array, Token::SquareOpen])?;
         let syntax = match token.token {
-            Token::Array => ArraySyntax::Long,
+            Token::Array => {
+                self.next_token().expect_token(&[Token::BracketOpen])?;
+                ArraySyntax::Long
+            }
             Token::SquareOpen => ArraySyntax::Short,
             _ => unreachable!(),
         };
@@ -406,7 +383,10 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             .next_token()
             .expect_token(&[Token::Array, Token::SquareOpen])?;
         let syntax = match token.token {
-            Token::Array => ArraySyntax::Long,
+            Token::Array => {
+                self.next_token().expect_token(&[Token::BracketOpen])?;
+                ArraySyntax::Long
+            }
             Token::SquareOpen => ArraySyntax::Short,
             _ => unreachable!(),
         };
@@ -495,7 +475,7 @@ impl<'source, 'a> ArrayWalker<'source, 'a> {
 }
 
 impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
-    type Error = SerdeParseError;
+    type Error = ParseError;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
     where
@@ -513,7 +493,13 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
             Token::Null,
             Token::Array,
             Token::SquareOpen,
+            self.syntax.close_bracket(),
         ])?;
+
+        if token.token == self.syntax.close_bracket() {
+            self.done = true;
+            return Ok(None);
+        }
 
         let next = self.de.next_token().expect_token(&[
             self.syntax.close_bracket(),
@@ -528,7 +514,7 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
                 let key = self.de.parser.parse_array_key(token)?;
                 match key {
                     Key::Int(key) if key == self.next_int_key => Ok(()),
-                    _ => Err(ParseError::UnexpectedArrayKey).with_span(span),
+                    _ => Err(RawParseError::UnexpectedArrayKey).with_span(span),
                 }?;
                 self.next_int_key += 1;
                 let value = self.de.next_token().expect_token(&[
@@ -556,15 +542,14 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
             _ => unreachable!(),
         };
 
-        dbg!(value_token.slice());
         // Deserialize an array element.
-        self.de.set_peeked(value_token);
+        self.de.push_peeked(value_token);
         seed.deserialize(&mut *self.de).map(Some)
     }
 }
 
 impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
-    type Error = SerdeParseError;
+    type Error = ParseError;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
     where
@@ -580,20 +565,46 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
             Token::Float,
             Token::LiteralString,
             Token::Null,
+            self.syntax.close_bracket(),
         ])?;
 
-        self.de.next_token().expect_token(&[Token::Arrow])?;
+        if token.token == self.syntax.close_bracket() {
+            self.done = true;
+            return Ok(None);
+        }
 
-        // Deserialize a map key.
-        self.de.set_peeked(token);
-        seed.deserialize(&mut *self.de).map(Some)
+        let next = self.de.next_token().expect_token(&[
+            Token::Arrow,
+            Token::Comma,
+            self.syntax.close_bracket(),
+        ])?;
+
+        match next.token {
+            Token::Arrow => {
+                // Deserialize a map key.
+                if let Key::Int(int_key) = self.de.parser.parse_array_key(token.clone())? {
+                    self.next_int_key = int_key + 1;
+                }
+                self.de.push_peeked(token);
+                seed.deserialize(&mut *self.de).map(Some)
+            }
+            _ => {
+                // implicit key
+                let key = self.next_int_key;
+                self.next_int_key += 1;
+                self.de.push_peeked(token);
+                self.de.push_peeked(next);
+                seed.deserialize(format!("{}", key).into_deserializer())
+                    .map(Some)
+            }
+        }
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
     where
         V: DeserializeSeed<'de>,
     {
-        let token = self.de.next_token().expect_token(&[
+        self.de.peek_token().expect_token(&[
             Token::Bool,
             Token::Integer,
             Token::Float,
@@ -604,7 +615,6 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
         ])?;
 
         // Deserialize a map key.
-        self.de.set_peeked(token);
         let value = seed.deserialize(&mut *self.de)?;
 
         let next = self
@@ -635,7 +645,7 @@ impl<'a, 'de> Enum<'a, 'de> {
 // Note that all enum deserialization methods in Serde refer exclusively to the
 // "externally tagged" enum representation.
 impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
-    type Error = SerdeParseError;
+    type Error = ParseError;
     type Variant = Self;
 
     fn variant_seed<V>(self, seed: V) -> Result<(V::Value, Self::Variant)>
@@ -651,7 +661,7 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
 // `VariantAccess` is provided to the `Visitor` to give it the ability to see
 // the content of the single variant that it decided to deserialize.
 impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
-    type Error = SerdeParseError;
+    type Error = ParseError;
 
     fn unit_variant(self) -> Result<()> {
         self.de.next_token().expect_token(&[Token::LiteralString])?;
@@ -692,14 +702,10 @@ mod tests {
     {
         match super::from_str(source) {
             Ok(res) => Ok(res),
-            Err(super::SerdeParseError::Spanned(err)) => {
-                let with_source = err.with_source(source);
-                eprintln!("{}", with_source);
-                Err(super::SerdeParseError::Spanned(with_source.spanned()))
-            }
             Err(err) => {
-                eprintln!("{}", err);
-                Err(err)
+                let sourced = err.with_source(source);
+                eprintln!("{}", sourced);
+                Err(sourced.into_inner())
             }
         }
     }

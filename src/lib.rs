@@ -2,18 +2,46 @@
 //!
 //! Allows parsing of php string, bool, number and array literals.
 //!
-//! ## Example
+//! ## Usage
+//!
+//! Parse into a generic representation
 //!
 //! ```rust
-//! use php_literal_parser::{parse, Value, Key};
+//! use php_literal_parser::{from_str, Value};
 //! # use std::fmt::Debug;
 //! # use std::error::Error;
 //!
 //! # fn main() -> Result<(), Box<dyn Error>> {
-//! let map = parse(r#"["foo" => true, "nested" => ['foo' => false]]"#)?;
+//! let map = from_str::<Value>(r#"["foo" => true, "nested" => ['foo' => false]]"#)?;
 //!
 //! assert_eq!(map["foo"], true);
 //! assert_eq!(map["nested"]["foo"], false);
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! Or parse into a specific struct using serde
+//!
+//! ```rust
+//! use php_literal_parser::from_str;
+//! # use serde_derive::Deserialize;
+//! use serde::Deserialize;
+//! # use std::fmt::Debug;
+//! # use std::error::Error;
+//!
+//! #[derive(Debug, Deserialize, PartialEq)]
+//! struct Target {
+//!     foo: bool,
+//!     bars: Vec<u8>
+//! }
+//!
+//! # fn main() -> Result<(), Box<dyn Error>> {
+//! let target = from_str(r#"["foo" => true, "bars" => [1, 2, 3, 4,]]"#)?;
+//!
+//! assert_eq!(Target {
+//!     foo: true,
+//!     bars: vec![1,2,3,4]
+//! }, target);
 //! # Ok(())
 //! # }
 //! ```
@@ -23,13 +51,17 @@ mod error;
 mod lexer;
 mod num;
 mod parser;
-mod serde;
+mod serde_impl;
 mod string;
 
-pub use error::{ParseError, SpannedError};
-pub use parser::parse;
+use crate::string::is_array_key_numeric;
+pub use error::{ParseError, RawParseError};
+use serde::de::{self, MapAccess, SeqAccess, Visitor};
+use serde::{Deserialize, Deserializer};
+pub use serde_impl::from_str;
 use std::borrow::Borrow;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
@@ -368,4 +400,299 @@ fn test_index() {
     assert_eq!(map["key"], "value");
     assert_eq!(map[1], true);
     assert_eq!(map[Key::Int(1)], true);
+}
+
+struct ValueVisitor;
+
+impl<'de> Visitor<'de> for ValueVisitor {
+    type Value = Value;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("any php literal")
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Bool(v))
+    }
+
+    fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.into()))
+    }
+
+    fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.into()))
+    }
+
+    fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.into()))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v))
+    }
+
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.into()))
+    }
+
+    fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.into()))
+    }
+
+    fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.into()))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Int(v.try_into().map_err(|_| {
+            E::custom(format!("i64 out of range: {}", v))
+        })?))
+    }
+
+    fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Float(v.into()))
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Float(v))
+    }
+
+    fn visit_char<E>(self, v: char) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::String(v.into()))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::String(v.into()))
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::String(v.into()))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::String(v))
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Value::Null)
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, <A as SeqAccess<'de>>::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        let mut result = HashMap::new();
+        let mut next_key = 0;
+        while let Some(value) = seq.next_element::<Value>()? {
+            let key = Key::Int(next_key);
+            next_key += 1;
+            result.insert(key, value);
+        }
+        Ok(Value::Array(result))
+    }
+
+    fn visit_map<A>(self, mut map: A) -> Result<Self::Value, <A as MapAccess<'de>>::Error>
+    where
+        A: MapAccess<'de>,
+    {
+        let mut result = HashMap::new();
+        while let Some((key, value)) = map.next_entry()? {
+            result.insert(key, value);
+        }
+        Ok(Value::Array(result))
+    }
+}
+
+impl<'de> Deserialize<'de> for Value {
+    fn deserialize<D>(deserializer: D) -> Result<Value, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(ValueVisitor)
+    }
+}
+
+struct KeyVisitor;
+
+impl<'de> Visitor<'de> for KeyVisitor {
+    type Value = Key;
+
+    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
+        formatter.write_str("a string, number, bool or null")
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(if v { 1 } else { 0 }))
+    }
+
+    fn visit_i8<E>(self, v: i8) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.into()))
+    }
+
+    fn visit_i16<E>(self, v: i16) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.into()))
+    }
+
+    fn visit_i32<E>(self, v: i32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.into()))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v))
+    }
+
+    fn visit_u8<E>(self, v: u8) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.into()))
+    }
+
+    fn visit_u16<E>(self, v: u16) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.into()))
+    }
+
+    fn visit_u32<E>(self, v: u32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.into()))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v.try_into().map_err(|_| {
+            E::custom(format!("i64 out of range: {}", v))
+        })?))
+    }
+
+    fn visit_f32<E>(self, v: f32) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v as i64))
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::Int(v as i64))
+    }
+
+    fn visit_char<E>(self, v: char) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::String(v.into()))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_string(v.into())
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        self.visit_string(v.into())
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        if is_array_key_numeric(&v) {
+            Ok(Key::Int(v.parse().unwrap()))
+        } else {
+            Ok(Key::String(v))
+        }
+    }
+
+    fn visit_unit<E>(self) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        Ok(Key::String(String::from("")))
+    }
+}
+
+impl<'de> Deserialize<'de> for Key {
+    fn deserialize<D>(deserializer: D) -> Result<Key, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        deserializer.deserialize_any(KeyVisitor)
+    }
 }

@@ -29,21 +29,36 @@ use thiserror::Error;
 /// ```
 ///
 #[derive(Debug)]
-pub struct SpannedError<T: Error + Debug> {
-    span: Span,
-    error: T,
+pub struct ParseError {
+    span: Option<Span>,
+    error: RawParseError,
 }
 
-impl<T: Error + Debug> SpannedError<T> {
-    pub fn new(error: T, span: Span) -> Self {
-        SpannedError { span, error }
+impl serde::de::Error for ParseError {
+    fn custom<T>(msg: T) -> Self
+    where
+        T: Display,
+    {
+        ParseError {
+            span: None,
+            error: RawParseError::custom(msg),
+        }
+    }
+}
+
+impl ParseError {
+    pub fn new(error: RawParseError, span: Span) -> Self {
+        ParseError {
+            span: Some(span),
+            error,
+        }
     }
 
-    pub fn error(&self) -> &T {
+    pub fn error(&self) -> &RawParseError {
         &self.error
     }
 
-    pub fn with_source(self, source: &str) -> SourceSpannedError<T> {
+    pub fn with_source(self, source: &str) -> SourceSpannedError {
         SourceSpannedError {
             span: self.span,
             error: self.error,
@@ -52,57 +67,74 @@ impl<T: Error + Debug> SpannedError<T> {
     }
 }
 
-impl<T: Error + Debug + 'static> Error for SpannedError<T> {
+impl Error for ParseError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(&self.error)
     }
 }
 
-impl<T: Error + Debug> Display for SpannedError<T> {
+impl Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        <T as Display>::fmt(&self.error, f)
+        <RawParseError as Display>::fmt(&self.error, f)
     }
 }
 
-pub struct SourceSpannedError<'source, T> {
-    span: Span,
-    error: T,
+impl From<RawParseError> for ParseError {
+    fn from(err: RawParseError) -> Self {
+        ParseError {
+            span: None,
+            error: err,
+        }
+    }
+}
+
+pub struct SourceSpannedError<'source> {
+    span: Option<Span>,
+    error: RawParseError,
     source: &'source str,
 }
 
-impl<'source, T: Error + Debug + 'static> SourceSpannedError<'source, T> {
-    pub fn spanned(self) -> SpannedError<T> {
-        SpannedError::new(self.error, self.span)
+impl<'source> SourceSpannedError<'source> {
+    pub fn into_inner(self) -> ParseError {
+        ParseError {
+            span: self.span,
+            error: self.error,
+        }
     }
 }
 
 const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
 
-impl<'source, T: Error + Debug> Display for SourceSpannedError<'source, T> {
+impl<'source> Display for SourceSpannedError<'source> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let start = get_position(self.source, self.span.start);
-        let end = get_position(self.source, self.span.end);
-        let span = SourceSpan::new(start, end, end.next_line());
+        match self.span.as_ref() {
+            Some(span) => {
+                let start = get_position(self.source, span.start);
+                let end = get_position(self.source, span.end);
+                let span = SourceSpan::new(start, end, end.next_line());
 
-        let mut fmt = Formatter::with_margin_color(Color::Blue);
-        let buffer = SourceBuffer::new(
-            self.source.chars().map(|char| Result::<char, ()>::Ok(char)),
-            Position::default(),
-            METRICS,
-        );
-        fmt.add(span, Some(format!("{}", self.error)), Style::Error);
-        let formatted = fmt
-            .render(
-                buffer.iter(),
-                SourceSpan::new(
+                let mut fmt = Formatter::with_margin_color(Color::Blue);
+                let buffer = SourceBuffer::new(
+                    self.source.chars().map(|char| Result::<char, ()>::Ok(char)),
                     Position::default(),
-                    Position::new(usize::max_value() - 1, usize::max_value()),
-                    Position::end(),
-                ),
-                &METRICS,
-            )
-            .unwrap();
-        write!(f, "{}", formatted)?;
+                    METRICS,
+                );
+                fmt.add(span, Some(format!("{}", self.error)), Style::Error);
+                let formatted = fmt
+                    .render(
+                        buffer.iter(),
+                        SourceSpan::new(
+                            Position::default(),
+                            Position::new(usize::max_value() - 1, usize::max_value()),
+                            Position::end(),
+                        ),
+                        &METRICS,
+                    )
+                    .unwrap();
+                write!(f, "{}", formatted)?;
+            }
+            None => write!(f, "{}", self.error)?,
+        }
         Ok(())
     }
 }
@@ -117,7 +149,7 @@ fn get_position(text: &str, index: usize) -> Position {
 }
 
 #[derive(Error, Debug)]
-pub enum ParseError {
+pub enum RawParseError {
     #[error("{0}")]
     UnexpectedToken(#[from] UnexpectedTokenError),
     #[error("Invalid boolean literal: {0}")]
@@ -132,11 +164,22 @@ pub enum ParseError {
     UnexpectedArrayKey,
     #[error("Trailing characters after parsing")]
     TrailingCharacters,
+    #[error("{0}")]
+    Custom(String),
 }
 
-impl From<UnescapeError> for ParseError {
+impl serde::de::Error for RawParseError {
+    fn custom<T>(msg: T) -> Self
+    where
+        T: Display,
+    {
+        RawParseError::Custom(msg.to_string())
+    }
+}
+
+impl From<UnescapeError> for RawParseError {
     fn from(_: UnescapeError) -> Self {
-        ParseError::InvalidStringLiteral
+        RawParseError::InvalidStringLiteral
     }
 }
 
@@ -180,17 +223,11 @@ impl Display for UnexpectedTokenError {
 impl Error for UnexpectedTokenError {}
 
 pub trait ExpectToken<'source> {
-    fn expect_token(
-        self,
-        expected: &[Token],
-    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>>;
+    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError>;
 }
 
 impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
-    fn expect_token(
-        self,
-        expected: &[Token],
-    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>> {
+    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError> {
         self.ok_or_else(|| UnexpectedTokenError {
             expected: expected.to_vec(),
             found: None,
@@ -201,10 +238,7 @@ impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
 }
 
 impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
-    fn expect_token(
-        self,
-        expected: &[Token],
-    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>> {
+    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError> {
         self.ok_or_else(|| UnexpectedTokenError {
             expected: expected.to_vec(),
             found: None,
@@ -215,10 +249,7 @@ impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
 }
 
 impl<'source> ExpectToken<'source> for SpannedToken<'source> {
-    fn expect_token(
-        self,
-        expected: &[Token],
-    ) -> Result<SpannedToken<'source>, SpannedError<ParseError>> {
+    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError> {
         if expected.iter().any(|expect| self.token.eq(expect)) {
             Ok(self)
         } else {
@@ -231,14 +262,14 @@ impl<'source> ExpectToken<'source> for SpannedToken<'source> {
     }
 }
 
-pub trait ResultExt<T, E: Error + Debug> {
-    fn with_span(self, span: Span) -> Result<T, SpannedError<E>>;
+pub trait ResultExt<T> {
+    fn with_span(self, span: Span) -> Result<T, ParseError>;
 }
 
-impl<T, E: Into<ParseError>> ResultExt<T, ParseError> for Result<T, E> {
-    fn with_span(self, span: Span) -> Result<T, SpannedError<ParseError>> {
-        self.map_err(|error| SpannedError {
-            span,
+impl<T, E: Into<RawParseError>> ResultExt<T> for Result<T, E> {
+    fn with_span(self, span: Span) -> Result<T, ParseError> {
+        self.map_err(|error| ParseError {
+            span: Some(span),
             error: error.into(),
         })
     }
