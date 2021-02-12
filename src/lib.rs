@@ -178,6 +178,22 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Get the value as i64 if it is an int
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            Value::Int(int) => Some(*int),
+            _ => None,
+        }
+    }
+
+    /// Get the value as f64 if it is a float
+    pub fn as_float(&self) -> Option<f64> {
+        match self {
+            Value::Float(float) => Some(*float),
+            _ => None,
+        }
+    }
 }
 
 impl PartialEq<bool> for Value {
