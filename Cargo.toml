@@ -1,7 +1,7 @@
 [package]
 name = "php-literal-parser"
 description = "parser for php literals"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Robin Appelman <robin@icewind.nl>"]
 edition = "2018"
 license = "MIT OR Apache-2.0"
@@ -9,7 +9,7 @@ repository = "https://github.com/icewind1991/php-literal-parser"
 documentation = "https://docs.rs/php-literal-parser"
 
 [dependencies]
-logos = "0.11"
+logos = "0.12"
 thiserror = "1.0"
 source-span = "2.2"
 memchr = "2.3.4"

@@ -1,6 +1,5 @@
 use logos::{Lexer, Logos, Span};
-use serde::export::fmt::Debug;
-use serde::export::Formatter;
+use std::fmt::{Debug, Formatter};
 
 #[derive(Logos, Debug, PartialEq, Clone, Copy)]
 pub enum Token {
