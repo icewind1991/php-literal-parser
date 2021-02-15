@@ -27,6 +27,8 @@ pub enum Token {
     Float,
     #[regex("-?(0|[1-9][0-9]*(_[0-9]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*|0[0-7]+(_[0-7]+)*|0[bB][01]+(_[01]+)*)")]
     Integer,
+    #[token(";")]
+    SemiColon,
     #[error]
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Error,

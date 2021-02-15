@@ -1,20 +1,19 @@
+use maplit::hashmap;
 use php_literal_parser::{from_str, Key, ParseError, Value};
+
+fn parse(source: &str) -> Result<Value, ParseError> {
+    match from_str(source) {
+        Ok(res) => Ok(res),
+        Err(err) => {
+            let sourced = err.with_source(source);
+            eprintln!("{}", sourced);
+            Err(sourced.into_inner())
+        }
+    }
+}
 
 #[test]
 fn test_parse_value() {
-    fn parse(source: &str) -> Result<Value, ParseError> {
-        match from_str(source) {
-            Ok(res) => Ok(res),
-            Err(err) => {
-                let sourced = err.with_source(source);
-                eprintln!("{}", sourced);
-                Err(sourced.into_inner())
-            }
-        }
-    }
-
-    use maplit::hashmap;
-
     assert_eq!(Value::Bool(true), parse("true").unwrap());
     assert_eq!(Value::Bool(false), parse("false").unwrap());
     assert_eq!(Value::Int(12), parse("12").unwrap());
@@ -131,4 +130,9 @@ fn test_parse_value() {
         }),
         parse(r#"array("2"=>3,"foo" => 4, null => 5, true => 6, false => 7)"#).unwrap()
     );
+}
+
+#[test]
+fn test_trailing_semi() {
+    assert_eq!(Value::Int(12), parse(r#"12;"#).unwrap());
 }

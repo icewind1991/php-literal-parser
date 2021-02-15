@@ -52,10 +52,13 @@ where
 {
     let mut deserializer = Deserializer::from_str(s);
     let t = T::deserialize(&mut deserializer)?;
-    if deserializer.next_token().is_none() {
-        Ok(t)
-    } else {
-        Err(RawParseError::TrailingCharacters.into())
+    match deserializer.next_token() {
+        None
+        | Some(SpannedToken {
+            token: Token::SemiColon,
+            ..
+        }) => Ok(t),
+        Some(_) => Err(RawParseError::TrailingCharacters.into()),
     }
 }
 
