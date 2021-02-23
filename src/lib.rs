@@ -510,7 +510,7 @@ impl<'de> Visitor<'de> for ValueVisitor {
     where
         E: de::Error,
     {
-        Ok(Value::String(v.into()))
+        Ok(Value::String(v.to_string()))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -668,7 +668,7 @@ impl<'de> Visitor<'de> for KeyVisitor {
     where
         E: de::Error,
     {
-        Ok(Key::String(v.into()))
+        Ok(Key::String(v.to_string()))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
