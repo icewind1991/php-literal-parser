@@ -30,6 +30,8 @@ pub enum Token {
     #[token(";")]
     SemiColon,
     #[error]
+    #[regex(r"(#|//)[^\n]*", logos::skip)]
+    #[regex(r"/\*([^*]|\*[^/])+\*/", logos::skip)]
     #[regex(r"[ \t\n\f]+", logos::skip)]
     Error,
 }
@@ -167,6 +169,29 @@ fn test_lex_float() {
 
     assert_eq!(lex.next(), Some(Token::Float));
     assert_eq!(lex.next(), None);
+}
+
+#[test]
+fn test_lex_comments() {
+    let source = r###"
+    array (
+        /**
+         * multi line comment
+         */
+        "double" => /** inline commend */ "quote", //line comment
+    )
+    "###;
+    let mut lex = Token::lexer(source);
+
+    assert_eq!(lex.next(), Some(Token::Array));
+    assert_eq!(lex.next(), Some(Token::BracketOpen));
+
+    assert_eq!(lex.next(), Some(Token::LiteralString));
+    assert_eq!(lex.next(), Some(Token::Arrow));
+    assert_eq!(lex.next(), Some(Token::LiteralString));
+    assert_eq!(lex.next(), Some(Token::Comma));
+
+    assert_eq!(lex.next(), Some(Token::BracketClose));
 }
 
 #[derive(Clone)]
