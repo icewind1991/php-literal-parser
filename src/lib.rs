@@ -194,6 +194,25 @@ impl Value {
             _ => None,
         }
     }
+
+    /// Iterate over array key and value pairs if it is an array
+    pub fn iter(&self) -> impl Iterator<Item = (&Key, &Value)> {
+        let map = match self {
+            Value::Array(map) => Some(map),
+            _ => None,
+        };
+        map.into_iter().flat_map(|map| map.iter())
+    }
+
+    /// Iterate over array keys if it is an array
+    pub fn keys(&self) -> impl Iterator<Item = &Key> {
+        self.iter().map(|(key, _value)| key)
+    }
+
+    /// Iterate over array values if it is an array
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.iter().map(|(_key, value)| value)
+    }
 }
 
 impl PartialEq<bool> for Value {
