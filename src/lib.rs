@@ -60,6 +60,7 @@ use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 pub use serde_impl::from_str;
 use std::borrow::Borrow;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::{Display, Formatter};
@@ -309,7 +310,7 @@ impl Display for Value {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
+#[derive(Debug, Eq, Clone)]
 pub enum Key {
     Int(i64),
     String(String),
@@ -366,6 +367,58 @@ impl Key {
         match self {
             Key::String(string) => Some(string),
             _ => None,
+        }
+    }
+
+    /// Get the key as &str if it is a string
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Key::String(str) => Some(str.as_str()),
+            _ => None,
+        }
+    }
+
+    /// Get the key as i64 if it is an int
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            Key::Int(int) => Some(*int),
+            _ => None,
+        }
+    }
+}
+
+impl PartialOrd for Key {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Key {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Key::Int(self_int), Key::Int(other_int)) => self_int.cmp(other_int),
+            (Key::String(self_string), Key::String(other_string)) => self_string.cmp(other_string),
+            (Key::String(self_string), Key::Int(other_int)) => {
+                self_string.cmp(&other_int.to_string())
+            }
+            (Key::Int(self_int), Key::String(other_string)) => {
+                self_int.to_string().cmp(other_string)
+            }
+        }
+    }
+}
+
+impl PartialEq for Key {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Key::Int(self_int), Key::Int(other_int)) => self_int.eq(other_int),
+            (Key::String(self_string), Key::String(other_string)) => self_string.eq(other_string),
+            (Key::String(self_string), Key::Int(other_int)) => {
+                self_string.eq(&other_int.to_string())
+            }
+            (Key::Int(self_int), Key::String(other_string)) => {
+                self_int.to_string().eq(other_string)
+            }
         }
     }
 }
