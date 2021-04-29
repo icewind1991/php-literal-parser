@@ -3,7 +3,7 @@ use crate::num::ParseIntError;
 use crate::string::UnescapeError;
 use logos::Span;
 use source_span::{
-    fmt::{Color, Formatter, Style},
+    fmt::{Formatter, Style},
     DefaultMetrics, Position, SourceBuffer, Span as SourceSpan,
 };
 use std::error::Error;
@@ -113,7 +113,7 @@ impl<'source> Display for SourceSpannedError<'source> {
                 let end = get_position(self.source, span.end);
                 let span = SourceSpan::new(start, end, end.next_line());
 
-                let mut fmt = Formatter::with_margin_color(Color::Blue);
+                let mut fmt = Formatter::new();
                 let buffer = SourceBuffer::new(
                     self.source.chars().map(|char| Result::<char, ()>::Ok(char)),
                     Position::default(),
