@@ -11,7 +11,7 @@ documentation = "https://docs.rs/php-literal-parser"
 [dependencies]
 logos = "0.12"
 thiserror = "1.0"
-source-span = { version = "2.2", default-features = false }
+source-span = { version = "=2.2.1", default-features = false }
 memchr = "2.3.4"
 serde = "1.0"
 
