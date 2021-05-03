@@ -28,7 +28,7 @@ use thiserror::Error;
 /// 6 |
 /// ```
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ParseError {
     span: Option<Span>,
     error: RawParseError,
@@ -148,7 +148,7 @@ fn get_position(text: &str, index: usize) -> Position {
     pos
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, Clone)]
 pub enum RawParseError {
     #[error("{0}")]
     UnexpectedToken(#[from] UnexpectedTokenError),
@@ -183,7 +183,7 @@ impl From<UnescapeError> for RawParseError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct UnexpectedTokenError {
     pub expected: Vec<Token>,
     pub found: Option<Token>,
