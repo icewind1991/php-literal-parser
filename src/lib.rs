@@ -463,7 +463,7 @@ impl Index<i64> for Value {
 
     fn index(&self, index: i64) -> &Self::Output {
         match self {
-            Value::Array(map) => map.index(&Key::Int(index)),
+            Value::Array(map) => map.get(&Key::Int(index)).unwrap_or(&Value::Null),
             _ => &Value::Null,
         }
     }
