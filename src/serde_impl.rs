@@ -595,6 +595,9 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
                 Token::LiteralString,
                 Token::Null,
                 self.syntax.close_bracket(),
+                // below is only when this token is a value with implicit key, not a when the token is a key
+                Token::Array,
+                Token::SquareOpen,
             ],
             self.source(),
         )?;
@@ -604,13 +607,29 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
             return Ok(None);
         }
 
-        let next = self.de.next_token().expect_token(
-            &[Token::Arrow, Token::Comma, self.syntax.close_bracket()],
-            self.source(),
-        )?;
+        let next = self.de.next_token().ok_or_else(|| {
+            Option::<SpannedToken>::None
+                .expect_token(
+                    &[Token::Arrow, Token::Comma, self.syntax.close_bracket()],
+                    self.source(),
+                )
+                .unwrap_err()
+        })?;
 
         match next.token {
             Token::Arrow => {
+                // now we know it's a map key, the expected token is a bit more strict
+                let token = token.expect_token(
+                    &[
+                        Token::Bool,
+                        Token::Integer,
+                        Token::Float,
+                        Token::LiteralString,
+                        Token::Null,
+                        self.syntax.close_bracket(),
+                    ],
+                    self.source(),
+                )?;
                 // Deserialize a map key.
                 if let Key::Int(int_key) = self.de.parser.parse_array_key(token.clone())? {
                     self.next_int_key = int_key + 1;
