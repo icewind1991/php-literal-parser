@@ -2,36 +2,30 @@ use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::string::UnescapeError;
 use logos::Span;
-use source_span::{
-    fmt::{Formatter, Style},
-    DefaultMetrics, Position, SourceBuffer, Span as SourceSpan,
-};
+use miette::{Diagnostic, SourceOffset, SourceSpan};
 use std::error::Error;
-use std::fmt::{self, Debug, Display};
+use std::fmt::{self, Debug, Display, Formatter};
 use std::num::ParseFloatError;
 use std::str::ParseBoolError;
 use thiserror::Error;
 
-/// An error and related source span
-///
-/// You can pretty-print the error with the offending source by using `with_source`
-///
-/// ## Example
-///
-/// ```text
-/// . |
-/// 2 |     [
-/// 3 |         "broken"
-/// 4 |         "array"                                                                                         
-///   |         ^^^^^^^^ Unexpected token, found LiteralString expected one of [SquareClose, Comma, Arrow]
-/// 5 |     ]
-/// 6 |
-/// ```
-///
-#[derive(Debug, Clone)]
-pub struct ParseError {
-    span: Option<Span>,
-    error: RawParseError,
+#[derive(Error, Debug, Clone, Diagnostic)]
+pub enum ParseError {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    UnexpectedToken(#[from] UnexpectedTokenError),
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    InvalidPrimitive(#[from] PrimitiveError),
+    #[error("Array key not valid for this position")]
+    #[diagnostic(code(php_object_parser::invalid_array_key))]
+    UnexpectedArrayKey(ArrayKeyError),
+    #[error("Trailing characters after parsing")]
+    #[diagnostic(code(php_object_parser::trailing))]
+    TrailingCharacters,
+    #[error("{0}")]
+    #[diagnostic(code(php_object_parser::other))]
+    Custom(String),
 }
 
 impl serde::de::Error for ParseError {
@@ -39,181 +33,85 @@ impl serde::de::Error for ParseError {
     where
         T: Display,
     {
-        ParseError {
-            span: None,
-            error: RawParseError::custom(msg),
-        }
+        ParseError::Custom(msg.to_string())
     }
 }
 
-impl ParseError {
-    pub fn new(error: RawParseError, span: Span) -> Self {
-        ParseError {
-            span: Some(span),
-            error,
-        }
-    }
-
-    pub fn error(&self) -> &RawParseError {
-        &self.error
-    }
-
-    pub fn with_source(self, source: &str) -> SourceSpannedError {
-        SourceSpannedError {
-            span: self.span,
-            error: self.error,
-            source,
-        }
-    }
-}
-
-impl Error for ParseError {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(&self.error)
-    }
-}
-
-impl Display for ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        <RawParseError as Display>::fmt(&self.error, f)
-    }
-}
-
-impl From<RawParseError> for ParseError {
-    fn from(err: RawParseError) -> Self {
-        ParseError {
-            span: None,
-            error: err,
-        }
-    }
-}
-
-pub struct SourceSpannedError<'source> {
-    span: Option<Span>,
-    error: RawParseError,
-    source: &'source str,
-}
-
-impl<'source> SourceSpannedError<'source> {
-    pub fn into_inner(self) -> ParseError {
-        ParseError {
-            span: self.span,
-            error: self.error,
-        }
-    }
-}
-
-const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
-
-impl<'source> Display for SourceSpannedError<'source> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.span.as_ref() {
-            Some(span) => {
-                let start = get_position(self.source, span.start);
-                let end = get_position(self.source, span.end);
-                let span = SourceSpan::new(start, end, end.next_line());
-
-                let mut fmt = Formatter::new();
-                let buffer = SourceBuffer::new(
-                    self.source.chars().map(|char| Result::<char, ()>::Ok(char)),
-                    Position::default(),
-                    METRICS,
-                );
-                fmt.add(span, Some(format!("{}", self.error)), Style::Error);
-                let formatted = fmt
-                    .render(
-                        buffer.iter(),
-                        SourceSpan::new(
-                            Position::default(),
-                            Position::new(usize::max_value() - 1, usize::max_value()),
-                            Position::end(),
-                        ),
-                        &METRICS,
-                    )
-                    .unwrap();
-                write!(f, "{}", formatted)?;
-            }
-            None => write!(f, "{}", self.error)?,
-        }
-        Ok(())
-    }
-}
-
-fn get_position(text: &str, index: usize) -> Position {
-    let mut pos = Position::default();
-    for char in text.chars().take(index) {
-        pos = pos.next(char, &METRICS);
-    }
-
-    pos
-}
-
-#[derive(Error, Debug, Clone)]
-pub enum RawParseError {
-    #[error("{0}")]
-    UnexpectedToken(#[from] UnexpectedTokenError),
-    #[error("Invalid boolean literal: {0}")]
-    InvalidBoolLiteral(#[from] ParseBoolError),
-    #[error("Invalid integer literal: {0}")]
-    InvalidIntLiteral(#[from] ParseIntError),
-    #[error("Invalid float literal: {0}")]
-    InvalidFloatLiteral(#[from] ParseFloatError),
-    #[error("Invalid string literal")]
-    InvalidStringLiteral,
-    #[error("Array key not valid for this position")]
-    UnexpectedArrayKey,
-    #[error("Trailing characters after parsing")]
-    TrailingCharacters,
-    #[error("{0}")]
-    Custom(String),
-}
-
-impl serde::de::Error for RawParseError {
-    fn custom<T>(msg: T) -> Self
-    where
-        T: Display,
-    {
-        RawParseError::Custom(msg.to_string())
-    }
-}
-
-impl From<UnescapeError> for RawParseError {
-    fn from(_: UnescapeError) -> Self {
-        RawParseError::InvalidStringLiteral
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Diagnostic)]
+#[diagnostic(code(php_object_parser::unexpected_token))]
 pub struct UnexpectedTokenError {
-    pub expected: Vec<Token>,
+    src: String,
+    #[snippet(src)]
+    snip: SourceSpan,
+    #[highlight(snip, label("Expected {}", self.expected))]
+    err_span: SourceSpan,
+    pub expected: TokenList,
     pub found: Option<Token>,
 }
 
 impl UnexpectedTokenError {
-    pub fn new(expected: &[Token], found: Option<Token>) -> Self {
+    pub fn new(
+        expected: &[Token],
+        found: Option<Token>,
+        src: String,
+        snip: SourceSpan,
+        err_span: SourceSpan,
+    ) -> Self {
         UnexpectedTokenError {
-            expected: expected.to_vec(),
+            src,
+            snip,
+            err_span,
+            expected: expected.into(),
             found,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct TokenList(Vec<Token>);
+
+impl Debug for TokenList {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl From<&[Token]> for TokenList {
+    fn from(list: &[Token]) -> Self {
+        TokenList(list.into())
+    }
+}
+
+impl Display for TokenList {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        if !self.0.is_empty() {
+            let mut tokens = self.0[0..self.0.len() - 1].iter();
+            write!(f, "{}", tokens.next().unwrap())?;
+            for token in tokens {
+                write!(f, ", {}", token)?;
+            }
+            if self.0.len() > 1 {
+                write!(f, " or {}", self.0.last().unwrap())?;
+            }
+        }
+        Ok(())
     }
 }
 
 impl Display for UnexpectedTokenError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.found {
-            Some(Token::Error) => write!(
-                f,
-                "No valid token found, expected one of {:?}",
-                self.expected
-            ),
+            Some(Token::Error) => {
+                write!(f, "No valid token found, expected one of {}", self.expected)
+            }
             Some(token) => write!(
                 f,
-                "Unexpected token, found {:?} expected one of {:?}",
+                "Unexpected token, found {} expected one of {}",
                 token, self.expected
             ),
             None => write!(
                 f,
-                "Unexpected token, found None expected one of {:?}",
+                "Unexpected token, found None expected one of {}",
                 self.expected
             ),
         }
@@ -222,55 +120,158 @@ impl Display for UnexpectedTokenError {
 
 impl Error for UnexpectedTokenError {}
 
-pub trait ExpectToken<'source> {
-    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError>;
+#[derive(Debug, Clone, Error, Diagnostic)]
+#[diagnostic(code(php_object_parser::invalid_primitive))]
+#[error("{kind}")]
+pub struct PrimitiveError {
+    src: String,
+    #[snippet(src)]
+    snip: SourceSpan,
+    #[highlight(snip, label("{}", self.kind.desc()))]
+    err_span: SourceSpan,
+    pub kind: PrimitiveErrorKind,
 }
 
-impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
-    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError> {
-        self.ok_or_else(|| UnexpectedTokenError {
-            expected: expected.to_vec(),
-            found: None,
-        })
-        .with_span(usize::max_value()..usize::max_value())
-        .and_then(|token| token.expect_token(expected))
-    }
+#[derive(Error, Debug, Clone)]
+pub enum PrimitiveErrorKind {
+    #[error("Invalid boolean literal: {0}")]
+    InvalidBoolLiteral(#[from] ParseBoolError),
+    #[error("Invalid integer literal: {0}")]
+    InvalidIntLiteral(#[from] ParseIntError),
+    #[error("Invalid float literal: {0}")]
+    InvalidFloatLiteral(#[from] ParseFloatError),
+    #[error("Invalid string literal")]
+    InvalidStringLiteral,
 }
 
-impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
-    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError> {
-        self.ok_or_else(|| UnexpectedTokenError {
-            expected: expected.to_vec(),
-            found: None,
-        })
-        .with_span(usize::max_value()..usize::max_value())
-        .and_then(|token| token.clone().expect_token(expected))
-    }
-}
-
-impl<'source> ExpectToken<'source> for SpannedToken<'source> {
-    fn expect_token(self, expected: &[Token]) -> Result<SpannedToken<'source>, ParseError> {
-        if expected.iter().any(|expect| self.token.eq(expect)) {
-            Ok(self)
-        } else {
-            Err(UnexpectedTokenError {
-                expected: expected.to_vec(),
-                found: Some(self.token),
-            })
-            .with_span(self.span)
+impl PrimitiveErrorKind {
+    pub fn desc(&self) -> &str {
+        match self {
+            PrimitiveErrorKind::InvalidBoolLiteral(_) => "Not a boolean",
+            PrimitiveErrorKind::InvalidIntLiteral(err) => err.desc(),
+            PrimitiveErrorKind::InvalidFloatLiteral(_) => "Not a valid float",
+            PrimitiveErrorKind::InvalidStringLiteral => "Not a string literal",
         }
     }
 }
 
-pub trait ResultExt<T> {
-    fn with_span(self, span: Span) -> Result<T, ParseError>;
+impl From<UnescapeError> for PrimitiveErrorKind {
+    fn from(_: UnescapeError) -> Self {
+        PrimitiveErrorKind::InvalidStringLiteral
+    }
 }
 
-impl<T, E: Into<RawParseError>> ResultExt<T> for Result<T, E> {
-    fn with_span(self, span: Span) -> Result<T, ParseError> {
-        self.map_err(|error| ParseError {
-            span: Some(span),
-            error: error.into(),
+#[derive(Debug, Clone, Error, Diagnostic)]
+#[diagnostic(code(php_object_parser::invalid_array_key))]
+#[error("Invalid array key")]
+pub struct ArrayKeyError {
+    src: String,
+    #[snippet(src)]
+    snip: SourceSpan,
+    #[highlight(snip, label("This is the highlight"))]
+    err_span: SourceSpan,
+}
+
+impl ArrayKeyError {
+    pub fn new(source: &str, snip: Span, err_span: Span) -> Self {
+        ArrayKeyError {
+            src: source.into(),
+            snip: map_span(&snip),
+            err_span: map_span(&err_span),
+        }
+    }
+}
+
+pub trait ExpectToken<'source> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+        source: &str,
+    ) -> Result<SpannedToken<'source>, ParseError>;
+}
+
+impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+        source: &str,
+    ) -> Result<SpannedToken<'source>, ParseError> {
+        self.ok_or_else(|| {
+            UnexpectedTokenError::new(
+                expected,
+                None,
+                source.into(),
+                map_span(&(0..source.len())),
+                map_span(&(source.len()..source.len())),
+            )
+            .into()
+        })
+        .and_then(|token| token.expect_token(expected, source))
+    }
+}
+
+impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+        source: &str,
+    ) -> Result<SpannedToken<'source>, ParseError> {
+        self.ok_or_else(|| {
+            UnexpectedTokenError::new(
+                expected,
+                None,
+                source.into(),
+                map_span(&(0..source.len())),
+                map_span(&(source.len()..source.len())),
+            )
+            .into()
+        })
+        .and_then(|token| token.clone().expect_token(expected, source))
+    }
+}
+
+impl<'source> ExpectToken<'source> for SpannedToken<'source> {
+    fn expect_token(
+        self,
+        expected: &[Token],
+        source: &str,
+    ) -> Result<SpannedToken<'source>, ParseError> {
+        if expected.iter().any(|expect| self.token.eq(expect)) {
+            Ok(self)
+        } else {
+            Err(UnexpectedTokenError::new(
+                expected,
+                Some(self.token),
+                source.into(),
+                map_span(&(0..source.len())),
+                map_span(&self.span),
+            )
+            .into())
+        }
+    }
+}
+
+fn map_span(span: &Span) -> SourceSpan {
+    SourceSpan::new(
+        SourceOffset::from(span.start),
+        SourceOffset::from(span.end - span.start),
+    )
+}
+
+pub trait ResultExt<T> {
+    fn with_span(self, span: Span, source: &str) -> Result<T, ParseError>;
+}
+
+impl<T, E: Into<PrimitiveErrorKind>> ResultExt<T> for Result<T, E> {
+    fn with_span(self, span: Span, source: &str) -> Result<T, ParseError> {
+        self.map_err(|error| {
+            PrimitiveError {
+                src: source.into(),
+                snip: map_span(&(0..source.len())),
+                err_span: map_span(&span),
+                kind: error.into(),
+            }
+            .into()
         })
     }
 }

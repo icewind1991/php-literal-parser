@@ -55,7 +55,7 @@ mod serde_impl;
 mod string;
 
 use crate::string::is_array_key_numeric;
-pub use error::{ParseError, RawParseError};
+pub use error::ParseError;
 use serde::de::{self, MapAccess, SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 pub use serde_impl::from_str;

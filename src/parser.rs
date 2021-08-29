@@ -8,12 +8,14 @@ use std::iter::Peekable;
 use std::num::ParseFloatError;
 
 pub struct Parser<'source> {
+    source: &'source str,
     tokens: Peekable<TokenStream<'source>>,
 }
 
 impl<'source> Parser<'source> {
     pub fn new(source: &'source str) -> Self {
         Parser {
+            source,
             tokens: TokenStream::new(Token::lexer(source)).peekable(),
         }
     }
@@ -40,29 +42,32 @@ impl<'source> Parser<'source> {
             .slice()
             .to_ascii_lowercase()
             .parse()
-            .with_span(token.span)
+            .with_span(token.span, token.source)
     }
 
     pub fn parse_int_token(&self, token: SpannedToken) -> Result<i64, ParseError> {
-        parse_int(token.slice()).with_span(token.span)
+        parse_int(token.slice()).with_span(token.span, token.source)
     }
 
     pub fn parse_float_token(&self, token: SpannedToken) -> Result<f64, ParseError> {
-        parse_float(token.slice()).with_span(token.span)
+        parse_float(token.slice()).with_span(token.span, token.source)
     }
 
     pub fn parse_string_token(&self, token: SpannedToken) -> Result<String, ParseError> {
-        parse_string(token.slice()).with_span(token.span)
+        parse_string(token.slice()).with_span(token.span, token.source)
     }
 
     pub fn parse_array_key(&self, token: SpannedToken) -> Result<Key, ParseError> {
-        let token = token.expect_token(&[
-            Token::Bool,
-            Token::Integer,
-            Token::Float,
-            Token::LiteralString,
-            Token::Null,
-        ])?;
+        let token = token.expect_token(
+            &[
+                Token::Bool,
+                Token::Integer,
+                Token::Float,
+                Token::LiteralString,
+                Token::Null,
+            ],
+            self.source,
+        )?;
         Ok(match self.parse_literal(token)? {
             Value::Int(int) => Key::Int(int),
             Value::Float(float) => Key::Int(float as i64),
@@ -72,6 +77,10 @@ impl<'source> Parser<'source> {
             Value::Null => Key::String(String::from("")),
             _ => unreachable!(),
         })
+    }
+
+    pub fn source(&self) -> &'source str {
+        self.source
     }
 }
 

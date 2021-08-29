@@ -11,8 +11,18 @@ pub enum ParseIntError {
     #[error("unexpected negative number")]
     UnexpectedNegative,
 }
+impl ParseIntError {
+    pub fn desc(&self) -> &str {
+        match self {
+            ParseIntError::Empty => "Number expected",
+            ParseIntError::InvalidDigit => "Not a valid digit",
+            ParseIntError::Overflow => "Number to large",
+            ParseIntError::UnexpectedNegative => "Expected a positive number",
+        }
+    }
+}
 
-/// Mostly copied from std
+/// Mostly copied from std, adjusted for php specifics
 pub fn parse_int(src: &str) -> Result<i64, ParseIntError> {
     if src.is_empty() {
         return Err(ParseIntError::Empty);

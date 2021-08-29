@@ -1,3 +1,4 @@
+use miette::DiagnosticResult;
 use php_literal_parser::{from_str, ParseError};
 use serde_derive::Deserialize;
 
@@ -7,7 +8,7 @@ struct Target {
     bars: Vec<u8>,
 }
 
-fn main() -> Result<(), ParseError> {
+fn main() -> DiagnosticResult<()> {
     let target = from_str(r#"["foo" => true, "bars" => [1, 2, 3, 4,]]"#)?;
 
     assert_eq!(

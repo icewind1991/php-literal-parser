@@ -4,11 +4,11 @@ use serde::de::{
 };
 use serde::Deserialize;
 
-use crate::error::{ExpectToken, ResultExt};
+use crate::error::{ArrayKeyError, ExpectToken, ResultExt};
 use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::parser::{ArraySyntax, Parser};
-use crate::{Key, ParseError, RawParseError};
+use crate::{Key, ParseError};
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 
@@ -25,6 +25,10 @@ impl<'de> Deserializer<'de> {
             parser: Parser::new(input),
             peeked: Default::default(),
         }
+    }
+
+    pub fn source(&self) -> &'de str {
+        self.parser.source()
     }
 }
 
@@ -58,7 +62,7 @@ where
             token: Token::SemiColon,
             ..
         }) => Ok(t),
-        Some(_) => Err(RawParseError::TrailingCharacters.into()),
+        Some(_) => Err(ParseError::TrailingCharacters.into()),
     }
 }
 
@@ -80,7 +84,9 @@ impl<'de> Deserializer<'de> {
     }
 
     fn parse_bool(&mut self) -> Result<bool> {
-        let token = self.next_token().expect_token(&[Token::Bool])?;
+        let token = self
+            .next_token()
+            .expect_token(&[Token::Bool], self.source())?;
         Ok(self.parser.parse_bool_token(token)?)
     }
 
@@ -92,22 +98,16 @@ impl<'de> Deserializer<'de> {
     where
         T: TryFrom<i64>,
     {
-        let token = self.next_token().expect_token(&[Token::Integer])?;
+        let token = self
+            .next_token()
+            .expect_token(&[Token::Integer], self.source())?;
         let span = token.span.clone();
         let int = self.parser.parse_int_token(token)?;
         if int < 0 {
-            Err(ParseError::new(
-                RawParseError::InvalidIntLiteral(ParseIntError::UnexpectedNegative),
-                span,
-            )
-            .into())
+            Err(ParseIntError::UnexpectedNegative).with_span(span, self.source())
         } else {
-            Ok(T::try_from(int).map_err(|_| {
-                ParseError::new(
-                    RawParseError::InvalidIntLiteral(ParseIntError::Overflow),
-                    span,
-                )
-            })?)
+            Ok(T::try_from(int)
+                .or_else(|_| Err(ParseIntError::Overflow).with_span(span, self.source()))?)
         }
     }
 
@@ -115,25 +115,25 @@ impl<'de> Deserializer<'de> {
     where
         T: TryFrom<i64>,
     {
-        let token = self.next_token().expect_token(&[Token::Integer])?;
+        let token = self
+            .next_token()
+            .expect_token(&[Token::Integer], self.source())?;
         let span = token.span.clone();
-        Ok(
-            T::try_from(self.parser.parse_int_token(token)?).map_err(|_| {
-                ParseError::new(
-                    RawParseError::InvalidIntLiteral(ParseIntError::Overflow),
-                    span,
-                )
-            })?,
-        )
+        Ok(T::try_from(self.parser.parse_int_token(token)?)
+            .or_else(|_| Err(ParseIntError::Overflow).with_span(span, self.source()))?)
     }
 
     fn parse_float(&mut self) -> Result<f64> {
-        let token = self.next_token().expect_token(&[Token::Float])?;
+        let token = self
+            .next_token()
+            .expect_token(&[Token::Float], self.source())?;
         Ok(self.parser.parse_float_token(token)?)
     }
 
     fn parse_string(&mut self) -> Result<String> {
-        let token = self.next_token().expect_token(&[Token::LiteralString])?;
+        let token = self
+            .next_token()
+            .expect_token(&[Token::LiteralString], self.source())?;
         Ok(self.parser.parse_string_token(token)?)
     }
 }
@@ -145,15 +145,19 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        let peek = self.peek_token().expect_token(&[
-            Token::Null,
-            Token::Bool,
-            Token::LiteralString,
-            Token::Integer,
-            Token::Float,
-            Token::Array,
-            Token::SquareOpen,
-        ])?;
+        let source = self.source();
+        let peek = self.peek_token().expect_token(
+            &[
+                Token::Null,
+                Token::Bool,
+                Token::LiteralString,
+                Token::Integer,
+                Token::Float,
+                Token::Array,
+                Token::SquareOpen,
+            ],
+            source,
+        )?;
         match peek.token {
             Token::Null => self.deserialize_unit(visitor),
             Token::Bool => self.deserialize_bool(visitor),
@@ -300,15 +304,19 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        let token = self.peek_token().expect_token(&[
-            Token::Null,
-            Token::Bool,
-            Token::LiteralString,
-            Token::Integer,
-            Token::Float,
-            Token::Array,
-            Token::SquareOpen,
-        ])?;
+        let source = self.source();
+        let token = self.peek_token().expect_token(
+            &[
+                Token::Null,
+                Token::Bool,
+                Token::LiteralString,
+                Token::Integer,
+                Token::Float,
+                Token::Array,
+                Token::SquareOpen,
+            ],
+            source,
+        )?;
         if token.token == Token::Null {
             let _ = self.next_token();
             visitor.visit_none()
@@ -321,7 +329,8 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        self.next_token().expect_token(&[Token::Null])?;
+        self.next_token()
+            .expect_token(&[Token::Null], self.source())?;
         visitor.visit_unit()
     }
 
@@ -345,10 +354,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let token = self
             .next_token()
-            .expect_token(&[Token::Array, Token::SquareOpen])?;
+            .expect_token(&[Token::Array, Token::SquareOpen], self.source())?;
         let syntax = match token.token {
             Token::Array => {
-                self.next_token().expect_token(&[Token::BracketOpen])?;
+                self.next_token()
+                    .expect_token(&[Token::BracketOpen], self.source())?;
                 ArraySyntax::Long
             }
             Token::SquareOpen => ArraySyntax::Short,
@@ -384,10 +394,11 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     {
         let token = self
             .next_token()
-            .expect_token(&[Token::Array, Token::SquareOpen])?;
+            .expect_token(&[Token::Array, Token::SquareOpen], self.source())?;
         let syntax = match token.token {
             Token::Array => {
-                self.next_token().expect_token(&[Token::BracketOpen])?;
+                self.next_token()
+                    .expect_token(&[Token::BracketOpen], self.source())?;
                 ArraySyntax::Long
             }
             Token::SquareOpen => ArraySyntax::Short,
@@ -419,25 +430,26 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
     where
         V: Visitor<'de>,
     {
-        // panic!("a");
-        let token = self.peek_token().expect_token(&[
-            Token::LiteralString,
-            Token::Array,
-            Token::SquareOpen,
-        ])?;
+        let source = self.source();
+        let token = self.peek_token().expect_token(
+            &[Token::LiteralString, Token::Array, Token::SquareOpen],
+            source,
+        )?;
         match token.token {
             Token::LiteralString => visitor.visit_enum(self.parse_string()?.into_deserializer()),
             Token::Array | Token::SquareOpen => {
                 self.eat_token();
                 let syntax = if token.token == Token::Array {
-                    self.next_token().expect_token(&[Token::BracketOpen])?;
+                    self.next_token()
+                        .expect_token(&[Token::BracketOpen], self.source())?;
                     ArraySyntax::Long
                 } else {
                     ArraySyntax::Short
                 };
 
                 let value = visitor.visit_enum(Enum::new(self))?;
-                self.next_token().expect_token(&[syntax.close_bracket()])?;
+                self.next_token()
+                    .expect_token(&[syntax.close_bracket()], self.source())?;
                 Ok(value)
             }
             _ => unreachable!(),
@@ -475,6 +487,10 @@ impl<'source, 'a> ArrayWalker<'source, 'a> {
             done: false,
         }
     }
+
+    fn source(&self) -> &'source str {
+        self.de.source()
+    }
 }
 
 impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
@@ -488,27 +504,29 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
             return Ok(None);
         }
 
-        let token = self.de.next_token().expect_token(&[
-            Token::Bool,
-            Token::Integer,
-            Token::Float,
-            Token::LiteralString,
-            Token::Null,
-            Token::Array,
-            Token::SquareOpen,
-            self.syntax.close_bracket(),
-        ])?;
+        let token = self.de.next_token().expect_token(
+            &[
+                Token::Bool,
+                Token::Integer,
+                Token::Float,
+                Token::LiteralString,
+                Token::Null,
+                Token::Array,
+                Token::SquareOpen,
+                self.syntax.close_bracket(),
+            ],
+            self.source(),
+        )?;
 
         if token.token == self.syntax.close_bracket() {
             self.done = true;
             return Ok(None);
         }
 
-        let next = self.de.next_token().expect_token(&[
-            self.syntax.close_bracket(),
-            Token::Comma,
-            Token::Arrow,
-        ])?;
+        let next = self.de.next_token().expect_token(
+            &[self.syntax.close_bracket(), Token::Comma, Token::Arrow],
+            self.source(),
+        )?;
 
         let value_token = match next.token.clone() {
             Token::Comma => token,
@@ -517,22 +535,29 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
                 let key = self.de.parser.parse_array_key(token)?;
                 match key {
                     Key::Int(key) if key == self.next_int_key => Ok(()),
-                    _ => Err(RawParseError::UnexpectedArrayKey).with_span(span),
+                    _ => Err(ParseError::UnexpectedArrayKey(ArrayKeyError::new(
+                        self.source(),
+                        span.clone(),
+                        span,
+                    ))),
                 }?;
                 self.next_int_key += 1;
-                let value = self.de.next_token().expect_token(&[
-                    Token::Bool,
-                    Token::Integer,
-                    Token::Float,
-                    Token::LiteralString,
-                    Token::Null,
-                    Token::Array,
-                    Token::SquareOpen,
-                ])?;
+                let value = self.de.next_token().expect_token(
+                    &[
+                        Token::Bool,
+                        Token::Integer,
+                        Token::Float,
+                        Token::LiteralString,
+                        Token::Null,
+                        Token::Array,
+                        Token::SquareOpen,
+                    ],
+                    self.source(),
+                )?;
                 let next = self
                     .de
                     .next_token()
-                    .expect_token(&[Token::Comma, self.syntax.close_bracket()])?;
+                    .expect_token(&[Token::Comma, self.syntax.close_bracket()], self.source())?;
                 if next.token == self.syntax.close_bracket() {
                     self.done = true;
                 }
@@ -562,25 +587,27 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
             return Ok(None);
         }
 
-        let token = self.de.next_token().expect_token(&[
-            Token::Bool,
-            Token::Integer,
-            Token::Float,
-            Token::LiteralString,
-            Token::Null,
-            self.syntax.close_bracket(),
-        ])?;
+        let token = self.de.next_token().expect_token(
+            &[
+                Token::Bool,
+                Token::Integer,
+                Token::Float,
+                Token::LiteralString,
+                Token::Null,
+                self.syntax.close_bracket(),
+            ],
+            self.source(),
+        )?;
 
         if token.token == self.syntax.close_bracket() {
             self.done = true;
             return Ok(None);
         }
 
-        let next = self.de.next_token().expect_token(&[
-            Token::Arrow,
-            Token::Comma,
-            self.syntax.close_bracket(),
-        ])?;
+        let next = self.de.next_token().expect_token(
+            &[Token::Arrow, Token::Comma, self.syntax.close_bracket()],
+            self.source(),
+        )?;
 
         match next.token {
             Token::Arrow => {
@@ -607,15 +634,19 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
     where
         V: DeserializeSeed<'de>,
     {
-        self.de.peek_token().expect_token(&[
-            Token::Bool,
-            Token::Integer,
-            Token::Float,
-            Token::LiteralString,
-            Token::Null,
-            Token::Array,
-            Token::SquareOpen,
-        ])?;
+        let source = self.source();
+        self.de.peek_token().expect_token(
+            &[
+                Token::Bool,
+                Token::Integer,
+                Token::Float,
+                Token::LiteralString,
+                Token::Null,
+                Token::Array,
+                Token::SquareOpen,
+            ],
+            source,
+        )?;
 
         // Deserialize a map key.
         let value = seed.deserialize(&mut *self.de)?;
@@ -623,7 +654,7 @@ impl<'de, 'a> MapAccess<'de> for ArrayWalker<'de, 'a> {
         let next = self
             .de
             .next_token()
-            .expect_token(&[Token::Comma, self.syntax.close_bracket()])?;
+            .expect_token(&[Token::Comma, self.syntax.close_bracket()], self.source())?;
 
         if next.token == self.syntax.close_bracket() {
             self.done = true;
@@ -639,6 +670,10 @@ struct Enum<'a, 'de: 'a> {
 impl<'a, 'de> Enum<'a, 'de> {
     fn new(de: &'a mut Deserializer<'de>) -> Self {
         Enum { de }
+    }
+
+    fn source(&self) -> &'de str {
+        self.de.source()
     }
 }
 
@@ -656,7 +691,9 @@ impl<'de, 'a> EnumAccess<'de> for Enum<'a, 'de> {
         V: DeserializeSeed<'de>,
     {
         let val = seed.deserialize(&mut *self.de)?;
-        self.de.next_token().expect_token(&[Token::Arrow])?;
+        self.de
+            .next_token()
+            .expect_token(&[Token::Arrow], self.source())?;
         Ok((val, self))
     }
 }
@@ -667,7 +704,9 @@ impl<'de, 'a> VariantAccess<'de> for Enum<'a, 'de> {
     type Error = ParseError;
 
     fn unit_variant(self) -> Result<()> {
-        self.de.next_token().expect_token(&[Token::LiteralString])?;
+        self.de
+            .next_token()
+            .expect_token(&[Token::LiteralString], self.source())?;
         Ok(())
     }
 
