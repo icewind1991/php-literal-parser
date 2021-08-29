@@ -26,10 +26,12 @@ pub enum ParseError {
     UnexpectedArrayKey(ArrayKeyError),
     #[error("Trailing characters after parsing")]
     #[diagnostic(code(php_object_parser::trailing))]
+    /// Trailing characters after parsing
     TrailingCharacters,
     #[error("{0}")]
-    #[diagnostic(code(php_object_parser::other))]
-    Custom(String),
+    #[diagnostic(code(php_object_parser::serde))]
+    /// Error while populating serde type
+    Serde(String),
 }
 
 impl serde::de::Error for ParseError {
@@ -37,7 +39,7 @@ impl serde::de::Error for ParseError {
     where
         T: Display,
     {
-        ParseError::Custom(msg.to_string())
+        ParseError::Serde(msg.to_string())
     }
 }
 
@@ -90,14 +92,18 @@ impl From<&[Token]> for TokenList {
 
 impl Display for TokenList {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if !self.0.is_empty() {
-            let mut tokens = self.0[0..self.0.len() - 1].iter();
-            write!(f, "{}", tokens.next().unwrap())?;
-            for token in tokens {
-                write!(f, ", {}", token)?;
-            }
-            if self.0.len() > 1 {
-                write!(f, " or {}", self.0.last().unwrap())?;
+        match self.0.len() {
+            0 => {}
+            1 => write!(f, "{}", self.0[0])?,
+            _ => {
+                let mut tokens = self.0[0..self.0.len() - 1].iter();
+                write!(f, "{}", tokens.next().unwrap())?;
+                for token in tokens {
+                    write!(f, ", {}", token)?;
+                }
+                if self.0.len() > 1 {
+                    write!(f, " or {}", self.0.last().unwrap())?;
+                }
             }
         }
         Ok(())
