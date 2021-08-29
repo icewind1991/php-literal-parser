@@ -4,7 +4,7 @@ use serde::de::{
 };
 use serde::Deserialize;
 
-use crate::error::{ArrayKeyError, ExpectToken, ResultExt};
+use crate::error::{ArrayKeyError, ArrayKeyErrorKind, ExpectToken, ResultExt};
 use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::parser::{ArraySyntax, Parser};
@@ -535,9 +535,14 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
                 let key = self.de.parser.parse_array_key(token)?;
                 match key {
                     Key::Int(key) if key == self.next_int_key => Ok(()),
-                    _ => Err(ParseError::UnexpectedArrayKey(ArrayKeyError::new(
+                    Key::Int(_) => Err(ParseError::UnexpectedArrayKey(ArrayKeyError::new(
+                        ArrayKeyErrorKind::NonConsecutive,
                         self.source(),
-                        span.clone(),
+                        span,
+                    ))),
+                    _ => Err(ParseError::UnexpectedArrayKey(ArrayKeyError::new(
+                        ArrayKeyErrorKind::IntegerExpected,
+                        self.source(),
                         span,
                     ))),
                 }?;

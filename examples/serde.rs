@@ -1,5 +1,5 @@
 use miette::DiagnosticResult;
-use php_literal_parser::{from_str, ParseError};
+use php_literal_parser::from_str;
 use serde_derive::Deserialize;
 
 #[derive(Debug, Deserialize, PartialEq)]
@@ -9,7 +9,7 @@ struct Target {
 }
 
 fn main() -> DiagnosticResult<()> {
-    let target = from_str(r#"["foo" => true, "bars" => [1, 2, 3, 4,]]"#)?;
+    let target = from_str(r#"["foo" => true, "bars" => [1, 2, 3, 4]]"#)?;
 
     assert_eq!(
         Target {

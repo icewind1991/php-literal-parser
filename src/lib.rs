@@ -67,17 +67,8 @@ use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::ops::Index;
 
-#[derive(Debug, PartialEq, Clone)]
-pub enum Value {
-    Bool(bool),
-    Int(i64),
-    Float(f64),
-    String(String),
-    Array(HashMap<Key, Value>),
-    Null,
-}
-
-/// A php value, can be either a bool, int, float, string or array
+/// A php value, can be either a bool, int, float, string, an array or null
+///
 /// note that in php all arrays are associative and thus represented by a map in rust.
 ///
 /// You can convert a `Value` into a regular rust type by pattern matching or using the `into_` functions.
@@ -101,6 +92,16 @@ pub enum Value {
 /// assert!(value["not"]["found"].is_null());
 /// # }
 /// ```
+#[derive(Debug, PartialEq, Clone)]
+pub enum Value {
+    Bool(bool),
+    Int(i64),
+    Float(f64),
+    String(String),
+    Array(HashMap<Key, Value>),
+    Null,
+}
+
 impl Value {
     /// Check if the value is a bool
     pub fn is_bool(&self) -> bool {
@@ -310,6 +311,7 @@ impl Display for Value {
     }
 }
 
+/// A php array key, can be either an int or string
 #[derive(Debug, Eq, Clone)]
 pub enum Key {
     Int(i64),

@@ -9,16 +9,20 @@ use std::num::ParseFloatError;
 use std::str::ParseBoolError;
 use thiserror::Error;
 
+/// Any error that occurred while trying to parse the php literal
 #[derive(Error, Debug, Clone, Diagnostic)]
 pub enum ParseError {
     #[error(transparent)]
     #[diagnostic(transparent)]
+    /// A token that wasn't expected was found while parsing
     UnexpectedToken(#[from] UnexpectedTokenError),
     #[error(transparent)]
     #[diagnostic(transparent)]
+    /// A malformed integer, float, boolean or string literal was found
     InvalidPrimitive(#[from] PrimitiveError),
     #[error("Array key not valid for this position")]
-    #[diagnostic(code(php_object_parser::invalid_array_key))]
+    #[diagnostic(transparent)]
+    /// An array key was found that is invalid for this position
     UnexpectedArrayKey(ArrayKeyError),
     #[error("Trailing characters after parsing")]
     #[diagnostic(code(php_object_parser::trailing))]
@@ -37,6 +41,7 @@ impl serde::de::Error for ParseError {
     }
 }
 
+/// A token that wasn't expected was found while parsing
 #[derive(Debug, Clone, Diagnostic)]
 #[diagnostic(code(php_object_parser::unexpected_token))]
 pub struct UnexpectedTokenError {
@@ -67,6 +72,7 @@ impl UnexpectedTokenError {
     }
 }
 
+/// List of expected tokens
 #[derive(Clone)]
 pub struct TokenList(Vec<Token>);
 
@@ -120,6 +126,7 @@ impl Display for UnexpectedTokenError {
 
 impl Error for UnexpectedTokenError {}
 
+/// A malformed integer, float, boolean or string literal was found
 #[derive(Debug, Clone, Error, Diagnostic)]
 #[diagnostic(code(php_object_parser::invalid_primitive))]
 #[error("{kind}")]
@@ -168,16 +175,37 @@ pub struct ArrayKeyError {
     src: String,
     #[snippet(src)]
     snip: SourceSpan,
-    #[highlight(snip, label("This is the highlight"))]
+    #[highlight(snip, label("{}", self.kind))]
     err_span: SourceSpan,
+    kind: ArrayKeyErrorKind,
+}
+
+#[derive(Debug, Clone)]
+pub enum ArrayKeyErrorKind {
+    IntegerExpected,
+    NonConsecutive,
+}
+
+impl Display for ArrayKeyErrorKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ArrayKeyErrorKind::IntegerExpected => "Expected integer key",
+                ArrayKeyErrorKind::NonConsecutive => "Expected consecutive integer key",
+            }
+        )
+    }
 }
 
 impl ArrayKeyError {
-    pub fn new(source: &str, snip: Span, err_span: Span) -> Self {
+    pub fn new(kind: ArrayKeyErrorKind, source: &str, err_span: Span) -> Self {
         ArrayKeyError {
             src: source.into(),
-            snip: map_span(&snip),
+            snip: map_span(&(0..source.len())),
             err_span: map_span(&err_span),
+            kind,
         }
     }
 }
