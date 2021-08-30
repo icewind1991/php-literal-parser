@@ -4,7 +4,7 @@ use serde::de::{
 };
 use serde::Deserialize;
 
-use crate::error::{ArrayKeyError, ArrayKeyErrorKind, ExpectToken, ResultExt};
+use crate::error::{ArrayKeyError, ArrayKeyErrorKind, ExpectToken, ResultExt, TrailingError};
 use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::parser::{ArraySyntax, Parser};
@@ -62,7 +62,7 @@ where
             token: Token::SemiColon,
             ..
         }) => Ok(t),
-        Some(_) => Err(ParseError::TrailingCharacters.into()),
+        Some(token) => Err(TrailingError::new(s, token.span.start..token.span.start).into()),
     }
 }
 

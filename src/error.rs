@@ -24,10 +24,10 @@ pub enum ParseError {
     #[diagnostic(transparent)]
     /// An array key was found that is invalid for this position
     UnexpectedArrayKey(ArrayKeyError),
-    #[error("Trailing characters after parsing")]
-    #[diagnostic(code(php_object_parser::trailing))]
+    #[error(transparent)]
+    #[diagnostic(transparent)]
     /// Trailing characters after parsing
-    TrailingCharacters,
+    TrailingCharacters(#[from] TrailingError),
     #[error("{0}")]
     #[diagnostic(code(php_object_parser::serde))]
     /// Error while populating serde type
@@ -212,6 +212,27 @@ impl ArrayKeyError {
             snip: map_span(&(0..source.len())),
             err_span: map_span(&err_span),
             kind,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Error, Diagnostic)]
+#[diagnostic(code(php_object_parser::trailing))]
+#[error("Trailing characters after parsing")]
+pub struct TrailingError {
+    src: String,
+    #[snippet(src)]
+    snip: SourceSpan,
+    #[highlight(snip, label("end of parsed value"))]
+    err_span: SourceSpan,
+}
+
+impl TrailingError {
+    pub fn new(source: &str, err_span: Span) -> Self {
+        TrailingError {
+            src: source.into(),
+            snip: map_span(&(0..source.len())),
+            err_span: map_span(&err_span),
         }
     }
 }
