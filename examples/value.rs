@@ -1,7 +1,7 @@
-use miette::DiagnosticResult;
+use main_error::MainError;
 use php_literal_parser::{from_str, Value};
 
-fn main() -> DiagnosticResult<()> {
+fn main() -> Result<(), MainError> {
     let source = r###"
     array (
         "double" => "quote",

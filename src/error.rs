@@ -2,34 +2,32 @@ use crate::lexer::{SpannedToken, Token};
 use crate::num::ParseIntError;
 use crate::string::UnescapeError;
 use logos::Span;
-use miette::{Diagnostic, SourceOffset, SourceSpan};
+use source_span::{
+    fmt::{Formatter, Style},
+    DefaultMetrics, Position, SourceBuffer, Span as SourceSpan,
+};
 use std::error::Error;
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt::{self, Debug, Display};
 use std::num::ParseFloatError;
 use std::str::ParseBoolError;
 use thiserror::Error;
 
 /// Any error that occurred while trying to parse the php literal
-#[derive(Error, Debug, Clone, Diagnostic)]
+#[derive(Error, Debug, Clone)]
 pub enum ParseError {
     #[error(transparent)]
-    #[diagnostic(transparent)]
     /// A token that wasn't expected was found while parsing
     UnexpectedToken(#[from] UnexpectedTokenError),
     #[error(transparent)]
-    #[diagnostic(transparent)]
     /// A malformed integer, float, boolean or string literal was found
     InvalidPrimitive(#[from] PrimitiveError),
-    #[error("Array key not valid for this position")]
-    #[diagnostic(transparent)]
+    #[error(transparent)]
     /// An array key was found that is invalid for this position
     UnexpectedArrayKey(ArrayKeyError),
     #[error(transparent)]
-    #[diagnostic(transparent)]
     /// Trailing characters after parsing
     TrailingCharacters(#[from] TrailingError),
     #[error("{0}")]
-    #[diagnostic(code(php_literal_parser::serde))]
     /// Error while populating serde type
     Serde(String),
 }
@@ -44,16 +42,32 @@ impl serde::de::Error for ParseError {
 }
 
 /// A token that wasn't expected was found while parsing
-#[derive(Debug, Clone, Diagnostic)]
-#[diagnostic(code(php_literal_parser::unexpected_token))]
+#[derive(Debug, Clone)]
 pub struct UnexpectedTokenError {
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("Expected {}", self.expected))]
-    err_span: SourceSpan,
+    snip: Span,
+    err_span: Span,
     pub expected: TokenList,
     pub found: Option<Token>,
+}
+
+impl Display for UnexpectedTokenError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let err = match &self.found {
+            Some(Token::Error) => {
+                format!("No valid token found, expected one of {}", self.expected)
+            }
+            Some(token) => format!(
+                "Unexpected token, found {} expected one of {}",
+                token, self.expected
+            ),
+            None => format!(
+                "Unexpected token, found None expected one of {}",
+                self.expected
+            ),
+        };
+        fmt_spanned(f, err, self.err_span.clone(), &self.src)
+    }
 }
 
 impl UnexpectedTokenError {
@@ -61,8 +75,8 @@ impl UnexpectedTokenError {
         expected: &[Token],
         found: Option<Token>,
         src: String,
-        snip: SourceSpan,
-        err_span: SourceSpan,
+        snip: Span,
+        err_span: Span,
     ) -> Self {
         UnexpectedTokenError {
             src,
@@ -79,7 +93,7 @@ impl UnexpectedTokenError {
 pub struct TokenList(Vec<Token>);
 
 impl Debug for TokenList {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
@@ -91,7 +105,7 @@ impl From<&[Token]> for TokenList {
 }
 
 impl Display for TokenList {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0.len() {
             0 => {}
             1 => write!(f, "{}", self.0[0])?,
@@ -110,38 +124,14 @@ impl Display for TokenList {
     }
 }
 
-impl Display for UnexpectedTokenError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self.found {
-            Some(Token::Error) => {
-                write!(f, "No valid token found, expected one of {}", self.expected)
-            }
-            Some(token) => write!(
-                f,
-                "Unexpected token, found {} expected one of {}",
-                token, self.expected
-            ),
-            None => write!(
-                f,
-                "Unexpected token, found None expected one of {}",
-                self.expected
-            ),
-        }
-    }
-}
-
 impl Error for UnexpectedTokenError {}
 
 /// A malformed integer, float, boolean or string literal was found
-#[derive(Debug, Clone, Error, Diagnostic)]
-#[diagnostic(code(php_literal_parser::invalid_primitive))]
-#[error("{kind}")]
+#[derive(Debug, Clone)]
 pub struct PrimitiveError {
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("{}", self.kind.desc()))]
-    err_span: SourceSpan,
+    snip: Span,
+    err_span: Span,
     pub kind: PrimitiveErrorKind,
 }
 
@@ -156,6 +146,15 @@ pub enum PrimitiveErrorKind {
     #[error("Invalid string literal")]
     InvalidStringLiteral,
 }
+
+impl Display for PrimitiveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let err = format!("{}", self.kind);
+        fmt_spanned(f, err, self.err_span.clone(), &self.src)
+    }
+}
+
+impl Error for PrimitiveError {}
 
 impl PrimitiveErrorKind {
     pub fn desc(&self) -> &str {
@@ -174,15 +173,11 @@ impl From<UnescapeError> for PrimitiveErrorKind {
     }
 }
 
-#[derive(Debug, Clone, Error, Diagnostic)]
-#[diagnostic(code(php_literal_parser::invalid_array_key))]
-#[error("Invalid array key")]
+#[derive(Debug, Clone)]
 pub struct ArrayKeyError {
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("{}", self.kind))]
-    err_span: SourceSpan,
+    snip: Span,
+    err_span: Span,
     kind: ArrayKeyErrorKind,
 }
 
@@ -193,7 +188,7 @@ pub enum ArrayKeyErrorKind {
 }
 
 impl Display for ArrayKeyErrorKind {
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "{}",
@@ -205,37 +200,55 @@ impl Display for ArrayKeyErrorKind {
     }
 }
 
+impl Display for ArrayKeyError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let err = format!("{}", self.kind);
+        fmt_spanned(f, err, self.err_span.clone(), &self.src)
+    }
+}
+
+impl Error for ArrayKeyError {}
+
 impl ArrayKeyError {
     pub fn new(kind: ArrayKeyErrorKind, source: &str, err_span: Span) -> Self {
         ArrayKeyError {
             src: source.into(),
-            snip: map_span(&(0..source.len())),
-            err_span: map_span(&err_span),
+            snip: (0..source.len()),
+            err_span,
             kind,
         }
     }
 }
 
-#[derive(Debug, Clone, Error, Diagnostic)]
-#[diagnostic(code(php_literal_parser::trailing))]
-#[error("Trailing characters after parsing")]
+#[derive(Debug, Clone)]
 pub struct TrailingError {
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("end of parsed value"))]
-    err_span: SourceSpan,
+    snip: Span,
+    err_span: Span,
 }
 
 impl TrailingError {
     pub fn new(source: &str, err_span: Span) -> Self {
         TrailingError {
             src: source.into(),
-            snip: map_span(&(0..source.len())),
-            err_span: map_span(&err_span),
+            snip: (0..source.len()),
+            err_span,
         }
     }
 }
+
+impl Display for TrailingError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt_spanned(
+            f,
+            format!("end of parsed value"),
+            self.err_span.clone(),
+            &self.src,
+        )
+    }
+}
+
+impl Error for TrailingError {}
 
 pub trait ExpectToken<'source> {
     fn expect_token(
@@ -256,8 +269,8 @@ impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
                 expected,
                 None,
                 source.into(),
-                map_span(&(0..source.len())),
-                map_span(&(source.len()..source.len())),
+                0..source.len(),
+                source.len()..source.len(),
             )
             .into()
         })
@@ -276,8 +289,8 @@ impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
                 expected,
                 None,
                 source.into(),
-                map_span(&(0..source.len())),
-                map_span(&(source.len()..source.len())),
+                0..source.len(),
+                source.len()..source.len(),
             )
             .into()
         })
@@ -298,19 +311,12 @@ impl<'source> ExpectToken<'source> for SpannedToken<'source> {
                 expected,
                 Some(self.token),
                 source.into(),
-                map_span(&(0..source.len())),
-                map_span(&self.span),
+                0..source.len(),
+                self.span,
             )
             .into())
         }
     }
-}
-
-fn map_span(span: &Span) -> SourceSpan {
-    SourceSpan::new(
-        SourceOffset::from(span.start),
-        SourceOffset::from(span.end - span.start),
-    )
 }
 
 pub trait ResultExt<T> {
@@ -322,11 +328,48 @@ impl<T, E: Into<PrimitiveErrorKind>> ResultExt<T> for Result<T, E> {
         self.map_err(|error| {
             PrimitiveError {
                 src: source.into(),
-                snip: map_span(&(0..source.len())),
-                err_span: map_span(&span),
+                snip: (0..source.len()),
+                err_span: span,
                 kind: error.into(),
             }
             .into()
         })
     }
+}
+
+fn get_position(text: &str, index: usize) -> Position {
+    let mut pos = Position::default();
+    for char in text.chars().take(index) {
+        pos = pos.next(char, &METRICS);
+    }
+
+    pos
+}
+
+const METRICS: DefaultMetrics = DefaultMetrics::with_tab_stop(4);
+
+fn fmt_spanned(f: &mut fmt::Formatter<'_>, err: String, span: Span, source: &str) -> fmt::Result {
+    let start = get_position(source, span.start);
+    let end = get_position(source, span.end);
+    let span = SourceSpan::new(start, end, end.next_line());
+
+    let mut fmt = Formatter::new();
+    let buffer = SourceBuffer::new(
+        source.chars().map(|char| Result::<char, ()>::Ok(char)),
+        Position::default(),
+        METRICS,
+    );
+    fmt.add(span, Some(format!("{}", err)), Style::Error);
+    let formatted = fmt
+        .render(
+            buffer.iter(),
+            SourceSpan::new(
+                Position::default(),
+                Position::new(usize::max_value() - 1, usize::max_value()),
+                Position::end(),
+            ),
+            &METRICS,
+        )
+        .unwrap();
+    write!(f, "{}", formatted)
 }
