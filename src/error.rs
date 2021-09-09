@@ -29,7 +29,7 @@ pub enum ParseError {
     /// Trailing characters after parsing
     TrailingCharacters(#[from] TrailingError),
     #[error("{0}")]
-    #[diagnostic(code(php_object_parser::serde))]
+    #[diagnostic(code(php_literal_parser::serde))]
     /// Error while populating serde type
     Serde(String),
 }
@@ -45,7 +45,7 @@ impl serde::de::Error for ParseError {
 
 /// A token that wasn't expected was found while parsing
 #[derive(Debug, Clone, Diagnostic)]
-#[diagnostic(code(php_object_parser::unexpected_token))]
+#[diagnostic(code(php_literal_parser::unexpected_token))]
 pub struct UnexpectedTokenError {
     src: String,
     #[snippet(src)]
@@ -134,7 +134,7 @@ impl Error for UnexpectedTokenError {}
 
 /// A malformed integer, float, boolean or string literal was found
 #[derive(Debug, Clone, Error, Diagnostic)]
-#[diagnostic(code(php_object_parser::invalid_primitive))]
+#[diagnostic(code(php_literal_parser::invalid_primitive))]
 #[error("{kind}")]
 pub struct PrimitiveError {
     src: String,
@@ -175,7 +175,7 @@ impl From<UnescapeError> for PrimitiveErrorKind {
 }
 
 #[derive(Debug, Clone, Error, Diagnostic)]
-#[diagnostic(code(php_object_parser::invalid_array_key))]
+#[diagnostic(code(php_literal_parser::invalid_array_key))]
 #[error("Invalid array key")]
 pub struct ArrayKeyError {
     src: String,
@@ -217,7 +217,7 @@ impl ArrayKeyError {
 }
 
 #[derive(Debug, Clone, Error, Diagnostic)]
-#[diagnostic(code(php_object_parser::trailing))]
+#[diagnostic(code(php_literal_parser::trailing))]
 #[error("Trailing characters after parsing")]
 pub struct TrailingError {
     src: String,
