@@ -14,7 +14,6 @@ thiserror = "1.0"
 memchr = "2.3.4"
 serde = "1.0"
 source-span = { version = "=2.2.1", default-features = false }
-parse-display = "0.5"
 
 [dev-dependencies]
 maplit = "1.0.2"
