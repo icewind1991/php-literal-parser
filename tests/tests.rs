@@ -5,9 +5,8 @@ fn parse(source: &str) -> Result<Value, ParseError> {
     match from_str(source) {
         Ok(res) => Ok(res),
         Err(err) => {
-            let sourced = err.with_source(source);
-            eprintln!("{}", sourced);
-            Err(sourced.into_inner())
+            eprintln!("{}", err);
+            Err(err)
         }
     }
 }
@@ -129,6 +128,30 @@ fn test_parse_value() {
             Key::Int(0) => Value::Int(7),
         }),
         parse(r#"array("2"=>3,"foo" => 4, null => 5, true => 6, false => 7)"#).unwrap()
+    );
+
+    assert_eq!(
+        Value::Array(hashmap! {
+            Key::Int(0) => hashmap! {
+                Key::String("a".into()) => Value::Int(2),
+            }.into(),
+            Key::Int(1) => hashmap! {
+                Key::String("b".into()) => Value::Int(3),
+            }.into()
+        }),
+        parse(r#"[["a" => 2], ["b" => 3]]"#).unwrap()
+    );
+
+    assert_eq!(
+        Value::Array(hashmap! {
+            Key::Int(0) => hashmap! {
+                Key::String("a".into()) => Value::Int(2),
+            }.into(),
+            Key::Int(1) => hashmap! {
+                Key::String("b".into()) => Value::Int(3),
+            }.into()
+        }),
+        parse(r#"array(array("a" => 2), array("b" => 3))"#).unwrap()
     );
 }
 

@@ -292,6 +292,12 @@ impl From<&str> for Value {
     }
 }
 
+impl From<HashMap<Key, Value>> for Value {
+    fn from(value: HashMap<Key, Value>) -> Self {
+        Value::Array(value)
+    }
+}
+
 impl Display for Value {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

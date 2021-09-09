@@ -769,9 +769,8 @@ mod tests {
         match super::from_str(source) {
             Ok(res) => Ok(res),
             Err(err) => {
-                let sourced = err.with_source(source);
-                eprintln!("{}", sourced);
-                Err(sourced.into_inner())
+                eprintln!("{}", err);
+                Err(err)
             }
         }
     }
