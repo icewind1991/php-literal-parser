@@ -14,6 +14,7 @@ thiserror = "1"
 memchr = "2"
 serde = "1"
 miette = "3"
+parse-display = "0.5"
 
 [dev-dependencies]
 maplit = "1"

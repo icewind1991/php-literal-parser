@@ -1,61 +1,54 @@
 use logos::{Lexer, Logos, Span};
-use std::fmt::{Debug, Display, Formatter};
+use parse_display::Display;
+use std::fmt::{Debug, Formatter};
 
-#[derive(Logos, Debug, PartialEq, Clone, Copy)]
+#[derive(Logos, Debug, PartialEq, Clone, Copy, Display)]
 pub enum Token {
     #[token("array")]
+    #[display("'array'")]
     Array,
     #[regex("(?i:true|false)")]
+    #[display("boolean literal")]
     Bool,
     #[token("null")]
+    #[display("'null'")]
     Null,
     #[token("=>")]
+    #[display("'=>'")]
     Arrow,
     #[token("(")]
+    #[display("'('")]
     BracketOpen,
     #[token(")")]
+    #[display("')'")]
     BracketClose,
     #[token("[")]
+    #[display("'['")]
     SquareOpen,
     #[token("]")]
+    #[display("']'")]
     SquareClose,
     #[token(",")]
+    #[display("','")]
     Comma,
+    #[display("string literal")]
     #[regex("(\"([^\"\\\\]|\\\\.)*\")|(\'([^\'\\\\]|\\\\.)*\')")]
     LiteralString,
+    #[display("float literal")]
     #[regex("-?((([0-9]+(_[0-9]+)*|([0-9]*(_[0-9]+)*[\\.][0-9]+(_[0-9]+)*)|([0-9]+(_[0-9]+)*[\\.][0-9]*(_[0-9]+)*)))[eE][+-]?[0-9]+(_[0-9]+)*|([0-9]*(_[0-9]+)*[\\.][0-9]+(_[0-9]+)*)|([0-9]+(_[0-9]+)*[\\.][0-9]*(_[0-9]+)*))")]
     Float,
+    #[display("integer literal")]
     #[regex("-?(0|[1-9][0-9]*(_[0-9]+)*|0[xX][0-9a-fA-F]+(_[0-9a-fA-F]+)*|0[0-7]+(_[0-7]+)*|0[bB][01]+(_[01]+)*)")]
     Integer,
     #[token(";")]
+    #[display("';'")]
     SemiColon,
     #[error]
     #[regex(r"(#|//)[^\n]*", logos::skip)]
     #[regex(r"/\*([^*]|\*[^/])+\*/", logos::skip)]
     #[regex(r"[ \t\n\f]+", logos::skip)]
+    #[display("error")]
     Error,
-}
-
-impl Display for Token {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        let str = match self {
-            Token::Array => "'array'",
-            Token::Bool => "boolean literal",
-            Token::Null => "'null'",
-            Token::Arrow => "'=>'",
-            Token::BracketOpen => "'('",
-            Token::BracketClose => "')'",
-            Token::SquareOpen => "'['",
-            Token::SquareClose => "']'",
-            Token::Comma => "','",
-            Token::LiteralString => "string literal",
-            Token::Float => "float literal",
-            Token::Integer => "integer literal",
-            Token::SemiColon => "';'",
-            Token::Error => "error",
-        };
-        write!(f, "{}", str)
-    }
 }
 
 #[test]
