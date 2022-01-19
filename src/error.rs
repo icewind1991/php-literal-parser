@@ -120,7 +120,7 @@ impl Display for UnexpectedTokenError {
             ),
             None => write!(
                 f,
-                "Unexpected token, found None expected one of {}",
+                "Unexpected end of input expected one of {}",
                 self.expected
             ),
         }
