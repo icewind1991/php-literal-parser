@@ -47,10 +47,9 @@ impl serde::de::Error for ParseError {
 #[derive(Debug, Clone, Diagnostic)]
 #[diagnostic(code(php_literal_parser::unexpected_token))]
 pub struct UnexpectedTokenError {
+    #[source_code]
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("Expected {}", self.expected))]
+    #[label("Expected {}", self.expected)]
     err_span: SourceSpan,
     pub expected: TokenList,
     pub found: Option<Token>,
@@ -61,12 +60,10 @@ impl UnexpectedTokenError {
         expected: &[Token],
         found: Option<Token>,
         src: String,
-        snip: SourceSpan,
         err_span: SourceSpan,
     ) -> Self {
         UnexpectedTokenError {
             src,
-            snip,
             err_span,
             expected: expected.into(),
             found,
@@ -137,10 +134,9 @@ impl Error for UnexpectedTokenError {}
 #[diagnostic(code(php_literal_parser::invalid_primitive))]
 #[error("{kind}")]
 pub struct PrimitiveError {
+    #[source_code]
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("{}", self.kind.desc()))]
+    #[label("{}", self.kind.desc())]
     err_span: SourceSpan,
     pub kind: PrimitiveErrorKind,
 }
@@ -178,10 +174,9 @@ impl From<UnescapeError> for PrimitiveErrorKind {
 #[diagnostic(code(php_literal_parser::invalid_array_key))]
 #[error("Invalid array key")]
 pub struct ArrayKeyError {
+    #[source_code]
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("{}", self.kind))]
+    #[label("{}", self.kind)]
     err_span: SourceSpan,
     kind: ArrayKeyErrorKind,
 }
@@ -209,7 +204,6 @@ impl ArrayKeyError {
     pub fn new(kind: ArrayKeyErrorKind, source: &str, err_span: Span) -> Self {
         ArrayKeyError {
             src: source.into(),
-            snip: map_span(&(0..source.len())),
             err_span: map_span(&err_span),
             kind,
         }
@@ -220,10 +214,9 @@ impl ArrayKeyError {
 #[diagnostic(code(php_literal_parser::trailing))]
 #[error("Trailing characters after parsing")]
 pub struct TrailingError {
+    #[source_code]
     src: String,
-    #[snippet(src)]
-    snip: SourceSpan,
-    #[highlight(snip, label("end of parsed value"))]
+    #[label("end of parsed value")]
     err_span: SourceSpan,
 }
 
@@ -231,7 +224,6 @@ impl TrailingError {
     pub fn new(source: &str, err_span: Span) -> Self {
         TrailingError {
             src: source.into(),
-            snip: map_span(&(0..source.len())),
             err_span: map_span(&err_span),
         }
     }
@@ -256,7 +248,6 @@ impl<'source> ExpectToken<'source> for Option<SpannedToken<'source>> {
                 expected,
                 None,
                 source.into(),
-                map_span(&(0..source.len())),
                 map_span(&(source.len()..source.len())),
             )
             .into()
@@ -276,7 +267,6 @@ impl<'a, 'source> ExpectToken<'source> for Option<&'a SpannedToken<'source>> {
                 expected,
                 None,
                 source.into(),
-                map_span(&(0..source.len())),
                 map_span(&(source.len()..source.len())),
             )
             .into()
@@ -298,7 +288,6 @@ impl<'source> ExpectToken<'source> for SpannedToken<'source> {
                 expected,
                 Some(self.token),
                 source.into(),
-                map_span(&(0..source.len())),
                 map_span(&self.span),
             )
             .into())
@@ -322,7 +311,6 @@ impl<T, E: Into<PrimitiveErrorKind>> ResultExt<T> for Result<T, E> {
         self.map_err(|error| {
             PrimitiveError {
                 src: source.into(),
-                snip: map_span(&(0..source.len())),
                 err_span: map_span(&span),
                 kind: error.into(),
             }
