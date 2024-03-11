@@ -7,7 +7,7 @@ edition = "2018"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/icewind1991/php-literal-parser"
 documentation = "https://docs.rs/php-literal-parser"
-rust-version = "1.70"
+rust-version = "1.70.0"
 
 [dependencies]
 logos = "0.14.0"
@@ -21,3 +21,8 @@ parse-display = "0.9.0"
 maplit = "1.0.2"
 serde_derive = "1.0.197"
 miette = { version = "7.2.0", features = ["fancy"] }
+criterion = "0.5.1"
+
+[[bench]]
+name = "parse"
+harness = false
