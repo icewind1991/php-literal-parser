@@ -31,7 +31,10 @@ impl UnescapeState {
 
     fn push_raw(&mut self, c: u32) -> UnescapeResult<()> {
         match std::char::from_u32(c) {
-            Some(c) => Ok(self.push_char(c)),
+            Some(c) => {
+                self.push_char(c);
+                Ok(())
+            },
             None => Err(UnescapeError),
         }
     }
@@ -193,7 +196,7 @@ impl<'a> PeekableBytes<'a> {
         self.slice.get(self.pos).copied()
     }
 
-    pub fn as_slice(self) -> &'a [u8] {
+    pub fn as_slice(&self) -> &'a [u8] {
         &self.slice[self.pos..]
     }
 }
@@ -205,7 +208,7 @@ pub fn is_array_key_numeric(string: &str) -> bool {
         return false;
     }
 
-    bytes.all(|byte| matches!(byte, b'0'..=b'9'))
+    bytes.all(|byte| byte.is_ascii_digit())
 }
 
 #[cfg(test)]
@@ -214,19 +217,19 @@ mod tests {
 
     #[test]
     fn test_is_numeric() {
-        assert_eq!(true, is_array_key_numeric("123"));
-        assert_eq!(true, is_array_key_numeric("-123"));
-        assert_eq!(true, is_array_key_numeric("0"));
-        assert_eq!(false, is_array_key_numeric("0123"));
-        assert_eq!(false, is_array_key_numeric("123asd"));
-        assert_eq!(false, is_array_key_numeric("+123"));
+        assert!(is_array_key_numeric("123"));
+        assert!(is_array_key_numeric("-123"));
+        assert!(is_array_key_numeric("0"));
+        assert!(!is_array_key_numeric("0123"));
+        assert!(!is_array_key_numeric("123asd"));
+        assert!(!is_array_key_numeric("+123"));
     }
 
     #[test]
     fn test_unescape_single() {
-        assert_eq!(unescape::<SingleQuoteString>(&r#"abc"#), Ok("abc".into()));
+        assert_eq!(unescape::<SingleQuoteString>(r#"abc"#), Ok("abc".into()));
         assert_eq!(
-            unescape::<SingleQuoteString>(&r#"ab\nc"#),
+            unescape::<SingleQuoteString>(r#"ab\nc"#),
             Ok("ab\\nc".into())
         );
         assert_eq!(
@@ -256,9 +259,9 @@ mod tests {
 
     #[test]
     fn test_unescape_double() {
-        assert_eq!(unescape::<DoubleQuoteString>(&r#"abc"#), Ok("abc".into()));
+        assert_eq!(unescape::<DoubleQuoteString>(r#"abc"#), Ok("abc".into()));
         assert_eq!(
-            unescape::<DoubleQuoteString>(&r#"ab\nc"#),
+            unescape::<DoubleQuoteString>(r#"ab\nc"#),
             Ok("ab\nc".into())
         );
         assert_eq!(

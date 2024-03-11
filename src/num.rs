@@ -43,7 +43,7 @@ pub fn parse_int(src: &str) -> Result<i64, ParseIntError> {
     let (radix, digits) = match digits {
         [b'0', b'x', tail @ ..] => (16, tail),
         [b'0', b'b', tail @ ..] => (2, tail),
-        [b'0', tail @ ..] if tail.len() > 0 => (8, tail),
+        [b'0', tail @ ..] if !tail.is_empty() => (8, tail),
         tail => (10, tail),
     };
 

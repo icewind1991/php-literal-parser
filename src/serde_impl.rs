@@ -87,7 +87,7 @@ impl<'de> Deserializer<'de> {
         let token = self
             .next_token()
             .expect_token(&[Token::Bool], self.source())?;
-        Ok(self.parser.parse_bool_token(token)?)
+        self.parser.parse_bool_token(token)
     }
 
     fn push_peeked(&mut self, peeked: SpannedToken<'de>) {
@@ -119,22 +119,22 @@ impl<'de> Deserializer<'de> {
             .next_token()
             .expect_token(&[Token::Integer], self.source())?;
         let span = token.span.clone();
-        Ok(T::try_from(self.parser.parse_int_token(token)?)
-            .or_else(|_| Err(ParseIntError::Overflow).with_span(span, self.source()))?)
+        T::try_from(self.parser.parse_int_token(token)?)
+            .or_else(|_| Err(ParseIntError::Overflow).with_span(span, self.source()))
     }
 
     fn parse_float(&mut self) -> Result<f64> {
         let token = self
             .next_token()
             .expect_token(&[Token::Float], self.source())?;
-        Ok(self.parser.parse_float_token(token)?)
+        self.parser.parse_float_token(token)
     }
 
     fn parse_string(&mut self) -> Result<String> {
         let token = self
             .next_token()
             .expect_token(&[Token::LiteralString], self.source())?;
-        Ok(self.parser.parse_string_token(token)?)
+        self.parser.parse_string_token(token)
     }
 }
 
@@ -348,7 +348,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         visitor.visit_newtype_struct(self)
     }
 
-    fn deserialize_seq<V>(mut self, visitor: V) -> Result<V::Value>
+    fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
@@ -365,7 +365,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             _ => unreachable!(),
         };
 
-        let value = visitor.visit_seq(ArrayWalker::new(&mut self, syntax))?;
+        let value = visitor.visit_seq(ArrayWalker::new(self, syntax))?;
         Ok(value)
     }
 
@@ -388,7 +388,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
         self.deserialize_seq(visitor)
     }
 
-    fn deserialize_map<V>(mut self, visitor: V) -> Result<V::Value>
+    fn deserialize_map<V>(self, visitor: V) -> Result<V::Value>
     where
         V: Visitor<'de>,
     {
@@ -405,7 +405,7 @@ impl<'de, 'a> de::Deserializer<'de> for &'a mut Deserializer<'de> {
             _ => unreachable!(),
         };
 
-        let value = visitor.visit_map(ArrayWalker::new(&mut self, syntax))?;
+        let value = visitor.visit_map(ArrayWalker::new(self, syntax))?;
         Ok(value)
     }
 
@@ -528,7 +528,7 @@ impl<'de, 'a> SeqAccess<'de> for ArrayWalker<'de, 'a> {
             self.source(),
         )?;
 
-        let value_token = match next.token.clone() {
+        let value_token = match next.token {
             Token::Comma => token,
             Token::Arrow => {
                 let span = token.span.clone();

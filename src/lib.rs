@@ -24,7 +24,6 @@
 //!
 //! ```rust
 //! use php_literal_parser::from_str;
-//! # use serde_derive::Deserialize;
 //! use serde::Deserialize;
 //! # use std::fmt::Debug;
 //! # use std::error::Error;
@@ -306,7 +305,7 @@ impl Display for Value {
             Value::Float(val) => write!(f, "{}", val),
             Value::String(val) => write!(f, "{}", val),
             Value::Array(val) => {
-                write!(f, "[\n")?;
+                writeln!(f, "[")?;
                 for (key, value) in val.iter() {
                     write!(f, "\t{} => {},", key, value)?;
                 }
