@@ -298,7 +298,7 @@ impl<'source> ExpectToken<'source> for SpannedToken<'source> {
 fn map_span(span: &Span) -> SourceSpan {
     SourceSpan::new(
         SourceOffset::from(span.start),
-        SourceOffset::from(span.end - span.start),
+        span.end - span.start,
     )
 }
 

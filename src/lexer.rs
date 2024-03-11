@@ -3,6 +3,9 @@ use parse_display::Display;
 use std::fmt::{Debug, Formatter};
 
 #[derive(Logos, Debug, PartialEq, Clone, Copy, Display)]
+#[logos(skip r"(#|//)[^\n]*")]
+#[logos(skip r"/\*([^*]|\*[^/])+\*/")]
+#[logos(skip r"[ \t\n\f]+")]
 pub enum Token {
     #[token("array")]
     #[display("'array'")]
@@ -43,11 +46,6 @@ pub enum Token {
     #[token(";")]
     #[display("';'")]
     SemiColon,
-    #[error]
-    #[regex(r"(#|//)[^\n]*", logos::skip)]
-    #[regex(r"/\*([^*]|\*[^/])+\*/", logos::skip)]
-    #[regex(r"[ \t\n\f]+", logos::skip)]
-    #[display("error")]
     Error,
 }
 
@@ -70,72 +68,72 @@ fn test_lex() {
     "###;
     let mut lex = Token::lexer(source);
 
-    assert_eq!(lex.next(), Some(Token::Array));
-    assert_eq!(lex.next(), Some(Token::BracketOpen));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Array));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::BracketOpen));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::SquareOpen));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::SquareOpen));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::SquareClose));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::SquareClose));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::SquareOpen));
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::SquareClose));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::SquareOpen));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::SquareClose));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::Bool));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Bool));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::Null));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Null));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::BracketClose));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::BracketClose));
 
-    assert_eq!(lex.next(), None);
+    assert_eq!(lex.next().transpose().unwrap(), None);
 }
 
 #[test]
@@ -143,23 +141,23 @@ fn test_lex_int() {
     let source = r###"0,123,0x123,0123,0b111,12_34_56"###;
     let mut lex = Token::lexer(source);
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Integer));
-    assert_eq!(lex.next(), None);
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Integer));
+    assert_eq!(lex.next().transpose().unwrap(), None);
 }
 
 #[test]
@@ -167,23 +165,23 @@ fn test_lex_float() {
     let source = r###".1,123.0,123e1,123e+1,123e-1,1_23.456"###;
     let mut lex = Token::lexer(source);
 
-    assert_eq!(lex.next(), Some(Token::Float));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Float));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Float));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Float));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Float));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Float));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Float));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Float));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Float));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Float));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::Float));
-    assert_eq!(lex.next(), None);
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Float));
+    assert_eq!(lex.next().transpose().unwrap(), None);
 }
 
 #[test]
@@ -198,15 +196,15 @@ fn test_lex_comments() {
     "###;
     let mut lex = Token::lexer(source);
 
-    assert_eq!(lex.next(), Some(Token::Array));
-    assert_eq!(lex.next(), Some(Token::BracketOpen));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Array));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::BracketOpen));
 
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Arrow));
-    assert_eq!(lex.next(), Some(Token::LiteralString));
-    assert_eq!(lex.next(), Some(Token::Comma));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Arrow));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::LiteralString));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::Comma));
 
-    assert_eq!(lex.next(), Some(Token::BracketClose));
+    assert_eq!(lex.next().transpose().unwrap(), Some(Token::BracketClose));
 }
 
 #[derive(Clone)]
@@ -247,7 +245,7 @@ impl<'source> Iterator for TokenStream<'source> {
     type Item = SpannedToken<'source>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let token = self.lexer.next()?;
+        let token = self.lexer.next()?.unwrap_or(Token::Error);
         Some(SpannedToken {
             token,
             span: self.lexer.span(),
