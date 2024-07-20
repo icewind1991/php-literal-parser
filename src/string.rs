@@ -54,7 +54,7 @@ fn parse_u32(
     mut result: u32,
     max: Option<u8>,
 ) -> UnescapeResult<u32> {
-    let mut max = max.unwrap_or(u8::max_value());
+    let mut max = max.unwrap_or(u8::MAX);
     while let Some(digit) = s.peek().and_then(|digit| (digit as char).to_digit(radix)) {
         let _ = s.next(); // consume the digit we peeked
         result = result.checked_mul(radix).ok_or(UnescapeError)?;
