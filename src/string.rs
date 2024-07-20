@@ -76,7 +76,8 @@ struct SingleQuoteString;
 impl EscapedString for SingleQuoteString {
     fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]> {
         let mut ins = PeekableBytes::new(bytes);
-        debug_assert_eq!(ins.next(), Some(b'\\'));
+        let _next = ins.next();
+        debug_assert_eq!(_next, Some(b'\\'));
         match ins.next() {
             None => {
                 return Err(UnescapeError);
@@ -98,7 +99,8 @@ struct DoubleQuoteString;
 impl EscapedString for DoubleQuoteString {
     fn handle_escape<'a>(bytes: &'a [u8], state: &mut UnescapeState) -> UnescapeResult<&'a [u8]> {
         let mut ins = PeekableBytes::new(bytes);
-        debug_assert_eq!(ins.next(), Some(b'\\'));
+        let _next = ins.next();
+        debug_assert_eq!(_next, Some(b'\\'));
         match ins.next() {
             None => {
                 return Err(UnescapeError);
