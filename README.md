@@ -14,7 +14,7 @@ fn main() -> Result<(), ParseError> {
 
     assert_eq!(map["foo"], true);
     assert_eq!(map["nested"]["foo"], false);
-    
+
     Ok(())
 }
 ```

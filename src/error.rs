@@ -297,10 +297,7 @@ impl<'source> ExpectToken<'source> for SpannedToken<'source> {
 }
 
 fn map_span(span: &Span) -> SourceSpan {
-    SourceSpan::new(
-        SourceOffset::from(span.start),
-        span.end - span.start,
-    )
+    SourceSpan::new(SourceOffset::from(span.start), span.end - span.start)
 }
 
 pub trait ResultExt<T> {
