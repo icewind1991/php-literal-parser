@@ -13,7 +13,7 @@ pub enum Token {
     #[regex("(?i:true|false)")]
     #[display("boolean literal")]
     Bool,
-    #[token("null")]
+    #[regex("(?i)null")]
     #[display("'null'")]
     Null,
     #[token("=>")]
@@ -63,7 +63,7 @@ fn test_lex() {
         "array" => [1,2,3,4],
         "bool" => false,
         "negative" => -1,
-        "null" => null,
+        "null" => Null,
     )
     "###;
     let mut lex = Token::lexer(source);
