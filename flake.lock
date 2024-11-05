@@ -1,98 +1,103 @@
 {
   "nodes": {
-    "naersk": {
+    "crane": {
+      "locked": {
+        "lastModified": 1730060262,
+        "narHash": "sha256-RMgSVkZ9H03sxC+Vh4jxtLTCzSjPq18UWpiM0gq6shQ=",
+        "owner": "ipetkov",
+        "repo": "crane",
+        "rev": "498d9f122c413ee1154e8131ace5a35a80d8fa76",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ipetkov",
+        "repo": "crane",
+        "type": "github"
+      }
+    },
+    "flakelight": {
       "inputs": {
         "nixpkgs": [
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1718727675,
-        "narHash": "sha256-uFsCwWYI2pUpt0awahSBorDUrUfBhaAiyz+BPTS2MHk=",
+        "lastModified": 1730724080,
+        "narHash": "sha256-0dNZpQzIsN+KxbsBGCwRQUJPHrvEuu/x0sJq0Z7xSCg=",
         "owner": "nix-community",
-        "repo": "naersk",
-        "rev": "941ce6dc38762a7cfb90b5add223d584feed299b",
+        "repo": "flakelight",
+        "rev": "aa5d58bd458e846e8dc7d160d9167b74d6976a41",
         "type": "github"
       },
       "original": {
         "owner": "nix-community",
-        "repo": "naersk",
+        "repo": "flakelight",
+        "type": "github"
+      }
+    },
+    "mill-scale": {
+      "inputs": {
+        "crane": "crane",
+        "flakelight": [
+          "flakelight"
+        ],
+        "rust-overlay": "rust-overlay"
+      },
+      "locked": {
+        "lastModified": 1730311680,
+        "narHash": "sha256-BMl5avEYe8vuYy9nAJOF0sMW/xhjscUfe43oj2uxu24=",
+        "owner": "icewind1991",
+        "repo": "mill-scale",
+        "rev": "08e597434887285596b347a93d18f7eab4adac69",
+        "type": "github"
+      },
+      "original": {
+        "owner": "icewind1991",
+        "repo": "mill-scale",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1721493951,
-        "narHash": "sha256-npNItxAWQMqCiRR3lzbB0EsGDQqin9Je8+kmaM4QWxw=",
+        "lastModified": 1730741070,
+        "narHash": "sha256-edm8WG19kWozJ/GqyYx2VjW99EdhjKwbY3ZwdlPAAlo=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "9427a9f20f967674ff1c3bfd2bbe77249ea819f5",
+        "rev": "d063c1dd113c91ab27959ba540c0d9753409edf3",
         "type": "github"
       },
       "original": {
         "id": "nixpkgs",
-        "ref": "release-24.05",
+        "ref": "nixos-24.05",
         "type": "indirect"
       }
     },
     "root": {
       "inputs": {
-        "naersk": "naersk",
-        "nixpkgs": "nixpkgs",
-        "rust-overlay": "rust-overlay",
-        "utils": "utils"
+        "flakelight": "flakelight",
+        "mill-scale": "mill-scale",
+        "nixpkgs": "nixpkgs"
       }
     },
     "rust-overlay": {
       "inputs": {
         "nixpkgs": [
+          "mill-scale",
+          "flakelight",
           "nixpkgs"
         ]
       },
       "locked": {
-        "lastModified": 1721441897,
-        "narHash": "sha256-gYGX9/22tPNeF7dR6bWN5rsrpU4d06GnQNNgZ6ZiXz0=",
+        "lastModified": 1730255392,
+        "narHash": "sha256-9pydem8OVxa0TwjUai1PJe0yHAJw556CWCEwyoAq8Ik=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "b7996075da11a2d441cfbf4e77c2939ce51506fd",
+        "rev": "7509d76ce2b3d22b40bd25368b45c0a9f7f36c89",
         "type": "github"
       },
       "original": {
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "type": "github"
-      }
-    },
-    "systems": {
-      "locked": {
-        "lastModified": 1681028828,
-        "narHash": "sha256-Vy1rq5AaRuLzOxct8nz4T6wlgyUR7zLU309k9mBC768=",
-        "owner": "nix-systems",
-        "repo": "default",
-        "rev": "da67096a3b9bf56a91d16901293e51ba5b49a27e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "nix-systems",
-        "repo": "default",
-        "type": "github"
-      }
-    },
-    "utils": {
-      "inputs": {
-        "systems": "systems"
-      },
-      "locked": {
-        "lastModified": 1710146030,
-        "narHash": "sha256-SZ5L6eA7HJ/nmkzGG7/ISclqe6oZdOZTNoesiInkXPQ=",
-        "owner": "numtide",
-        "repo": "flake-utils",
-        "rev": "b1d9ab70662946ef0850d488da1c9019f3a9752a",
-        "type": "github"
-      },
-      "original": {
-        "owner": "numtide",
-        "repo": "flake-utils",
         "type": "github"
       }
     }
