@@ -1,3 +1,5 @@
+# Moved to https://codeberg.org/icewind/php-literal-parser
+
 # php-literal-parser
 
 parser for php literals.
